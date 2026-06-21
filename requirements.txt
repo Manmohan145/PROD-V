@@ -1,8 +1,23 @@
-streamlit>=1.30.0
-opencv-python>=4.8.0
-ollama>=0.2.1
-python-dotenv>=1.0.0
-pillow>=10.0.0
-pytesseract>=0.3.10
-pyttsx3>=2.90
+# =====================================================
+# VisionAI Edge — Python Dependencies
+# Production-Ready Requirements
+# =====================================================
+
+# Core Web Framework
 fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.7
+
+# AI Vision
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Local LLM
+ollama>=0.2.1
+
+# OCR
+Pillow>=10.0.0
+pytesseract>=0.3.10
+
+# Utilities
+python-dotenv>=1.0.0

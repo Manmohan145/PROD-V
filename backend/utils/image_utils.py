@@ -63,26 +63,7 @@ def convert_cv2_to_pil(cv2_image: np.ndarray) -> Image.Image:
     rgb_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB)
     return Image.fromarray(rgb_image)
 
-def convert_pil_to_cv2(pil_image: Image.Image) -> np.ndarray:
-    """
-    Converts a PIL Image (RGB) to an OpenCV BGR image array.
-    
-    Args:
-        pil_image (Image.Image): The PIL Image.
-        
-    Returns:
-        np.ndarray: The OpenCV BGR image array.
-    """
-    np_arr = np.array(pil_image)
-    # Check if image is grayscale or RGB
-    if len(np_arr.shape) == 2:
-        return cv2.cvtColor(np_arr, cv2.COLOR_GRAY2BGR)
-    elif np_arr.shape[2] == 4:
-        # RGBA to BGR
-        return cv2.cvtColor(np_arr, cv2.COLOR_RGBA2BGR)
-    else:
-        # RGB to BGR
-        return cv2.cvtColor(np_arr, cv2.COLOR_RGB2BGR)
+
 
 def save_uploaded_image(image_bytes: bytes, original_filename: str, upload_dir: str = "uploads") -> str:
     """

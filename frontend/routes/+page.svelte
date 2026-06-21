@@ -1,9 +1,9 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
-    import FlashcardDeck from '$lib/components/FlashcardDeck.svelte';
-    import QuizComponent from '$lib/components/QuizComponent.svelte';
-    import HistoryPanel from '$lib/components/HistoryPanel.svelte';
-    import ReadingHighlighter from '$lib/components/ReadingHighlighter.svelte';
+    import FlashcardDeck from '$components/FlashcardDeck.svelte';
+    import QuizComponent from '$components/QuizComponent.svelte';
+    import HistoryPanel from '$components/HistoryPanel.svelte';
+    import ReadingHighlighter from '$components/ReadingHighlighter.svelte';
     import { marked } from 'marked';
 
     // Global App States
@@ -90,20 +90,8 @@
 
 
 
-    // Switch Vision Engine
-    $effect(() => {
-        // Monitor vision engine change and tell FastAPI to toggle detector state
-        if (visionEngine) {
-            const formData = new FormData();
-            formData.append('engine_mode', visionEngine);
-            formData.append('confidence_threshold', confidenceThreshold.toString());
-            // Fast ping to adjust mode
-            fetch('http://127.0.0.1:8000/api/analyze', {
-                method: 'POST',
-                body: formData
-            }).catch(e => console.warn("API Server not ready to toggle engine yet."));
-        }
-    });
+    // Note: Removed the pre-emptive /api/analyze ping effect. The backend dynamically switches 
+    // the vision engine mode during the actual analyze requests.
 
     const scienceFacts = [
         "Octopuses possess three hearts, nine brains, and cobalt-blue blood.",

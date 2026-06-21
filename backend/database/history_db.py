@@ -4,7 +4,7 @@ import cv2
 import base64
 from datetime import datetime
 
-DB_PATH = "scan_history.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "scan_history.db")
 
 def init_db():
     """Initializes the SQLite database and creates the scan_history table if it doesn't exist."""

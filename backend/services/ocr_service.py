@@ -1,10 +1,9 @@
 import os
 from PIL import Image
 import io
-from dotenv import load_dotenv
-from backend.local_llm_service import LocalLLMService
+from backend.services.local_llm_service import LocalLLMService
 
-load_dotenv()
+
 class OCRService:
     def __init__(self):
         """Initializes the OCR service and checks Ollama connectivity."""

@@ -28,7 +28,7 @@ class LocalLLMService:
         self.client = Client(host=self.host, timeout=self.timeout)
         
         # Local Persistent Cache File Setup
-        self.cache_file = os.path.join(os.path.dirname(__file__), "..", "llm_cache.json")
+        self.cache_file = os.path.join(os.path.dirname(__file__), "..", "..", "llm_cache.json")
         self.cache = self._load_cache()
         
         # Verify connection on startup
@@ -95,6 +95,17 @@ class LocalLLMService:
             md5_hash = hashlib.md5(clean_q.encode("utf-8")).hexdigest()
             return f"{prefix}:hash:{md5_hash}"
         return f"{prefix}:{clean_q.replace(' ', '_')}"
+
+    def _strip_code_fences(self, content: str) -> str:
+        """Strips markdown code fences from LLM JSON responses."""
+        if content.startswith("```json"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        return content.strip()
+
 
     def generate_object_knowledge(self, object_name: str) -> str:
         """
@@ -303,14 +314,8 @@ The JSON structure MUST follow this exact schema:
             content = response["response"].strip()
             
             # Clean markdown code fences if output returned them despite JSON format setting
-            if content.startswith("```json"):
-                content = content[7:]
-            elif content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            
-            parsed_data = json.loads(content.strip())
+            content = self._strip_code_fences(content)
+            parsed_data = json.loads(content)
             
             # Validate structure and heal malformed data
             parsed_data, _ = self._validate_and_heal_educational_data(parsed_data, object_name)
@@ -488,13 +493,7 @@ Format exactly as:
                 options={"temperature": 0.4}
             )
             content = response["response"].strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            elif content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            return json.loads(content.strip())
+            return json.loads(self._strip_code_fences(content))
         except Exception as e:
             print(f"Separate viva generation failed: {e}")
             return [
@@ -545,13 +544,7 @@ Format exactly as:
                 options={"temperature": 0.4}
             )
             content = response["response"].strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            elif content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            return json.loads(content.strip())
+            return json.loads(self._strip_code_fences(content))
         except Exception:
             return [
                 {
@@ -596,13 +589,7 @@ Format exactly as:
                 options={"temperature": 0.4}
             )
             content = response["response"].strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            elif content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            return json.loads(content.strip())
+            return json.loads(self._strip_code_fences(content))
         except Exception:
             return [
                 {

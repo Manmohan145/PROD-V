@@ -36,7 +36,7 @@ if not exist "node_modules" (
 
 echo.
 echo Launching FastAPI backend server on http://localhost:8000...
-start "VisionAI-API" /b venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000
+start "VisionAI-API" /b venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 echo Launching SvelteKit frontend server on http://localhost:5173...
 start "VisionAI-Frontend" /b cmd.exe /c npm run dev

@@ -2,43 +2,27 @@ import os
 import time
 import base64
 import cv2
-import numpy as np
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 
 # Import backend modules
-from backend.detector import ObjectDetector
-from backend.local_llm_service import LocalLLMService, OllamaConnectionError
-from backend.image_utils import (
+from backend.services.detector import ObjectDetector
+from backend.services.local_llm_service import LocalLLMService
+from backend.services.ocr_service import OCRService
+from backend.utils.image_utils import (
     validate_image_file, 
     load_image_from_bytes, 
-    convert_cv2_to_pil, 
     save_uploaded_image,
     get_wikipedia_image
 )
-from backend.history_db import (
+from backend.database.history_db import (
     save_scan, 
     get_history, 
     delete_record, 
     clear_history
 )
-from backend.ocr_service import OCRService
+from backend.models.domain_models import CompareRequest, LearnRequest, ChatRequest
 
-# Initialize FastAPI App
-app = FastAPI(
-    title="VisionAI REST Backend",
-    description="Exposes AI Vision and Generative LLM services to the SvelteKit frontend."
-)
-
-# Configure CORS for local SvelteKit dev server
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+router = APIRouter()
 
 # Pre-load/instantiate services
 detector = ObjectDetector(mode="classification")
@@ -46,22 +30,7 @@ detector.load_model()
 llm_service = LocalLLMService()
 ocr_service = OCRService()
 
-class CompareRequest(BaseModel):
-    object_a: str
-    object_b: str
-
-class LearnRequest(BaseModel):
-    target_object: str
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    selected_label: str
-    messages: list[ChatMessage]
-
-@app.get("/api/status")
+@router.get("/api/status")
 def get_status():
     """Returns Ollama status, current model, and active engine configuration."""
     ollama_active = llm_service.check_connection()
@@ -71,7 +40,7 @@ def get_status():
         "vision_engine": detector.mode
     }
 
-@app.post("/api/analyze")
+@router.post("/api/analyze")
 async def analyze_image(
     file: UploadFile = File(...),
     engine_mode: str = Form("classification"),
@@ -127,10 +96,12 @@ async def analyze_image(
             "annotated_image": f"data:image/png;base64,{base64_str}",
             "top_label": top_det['label']
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
-@app.get("/api/search")
+@router.get("/api/search")
 def search_object(q: str):
     """Searches Wikipedia and queries local LLM for object information."""
     if not q:
@@ -156,7 +127,7 @@ def search_object(q: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/learn")
+@router.post("/api/learn")
 def learn_curriculum(req: LearnRequest):
     """Generates MCQs, flashcards, revision notes, and viva list for a concept."""
     try:
@@ -174,7 +145,7 @@ def learn_curriculum(req: LearnRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/chat")
+@router.post("/api/chat")
 def chat_with_object(req: ChatRequest):
     """Contextual interactive dialogue with local Ollama regarding an object."""
     try:
@@ -206,13 +177,14 @@ def chat_with_object(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/ocr")
+@router.post("/api/ocr")
 async def ocr_document(file: UploadFile = File(...)):
     """Extracts text via pytesseract and compiles structured summaries via Ollama."""
     try:
         file_bytes = await file.read()
         text, method = ocr_service.extract_text(file_bytes)
         
+        # Check LLM summary analysis
         analysis = None
         if llm_service.check_connection():
             analysis = ocr_service.analyze_document(text)
@@ -225,7 +197,7 @@ async def ocr_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/compare")
+@router.post("/api/compare")
 def compare_concepts(req: CompareRequest):
     """Compares structural, ecological, or technical differences between concepts."""
     try:
@@ -243,7 +215,7 @@ def compare_concepts(req: CompareRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/history")
+@router.get("/api/history")
 def scan_history():
     """Retrieves SQLite scan records."""
     try:
@@ -251,7 +223,7 @@ def scan_history():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/history/{record_id}")
+@router.delete("/api/history/{record_id}")
 def delete_history_record(record_id: int):
     """Deletes a specific history record."""
     try:
@@ -260,7 +232,7 @@ def delete_history_record(record_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/history/clear")
+@router.post("/api/history/clear")
 def clear_all_history():
     """Clears all logs and uploads."""
     try:
@@ -268,6 +240,3 @@ def clear_all_history():
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
