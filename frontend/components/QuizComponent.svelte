@@ -9,7 +9,7 @@
     let confettiElements = $state([]);
 
     function triggerConfetti() {
-        const colors = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+        const colors = ['#22c55e', '#16a34a', '#86efac', '#f59e0b', '#f3f4f6', '#9ca3af'];
         const tempConfetti = [];
         for (let i = 0; i < 80; i++) {
             tempConfetti.push({
@@ -352,16 +352,16 @@
     }
 
     .option-btn:hover:not(:disabled) {
-        background: rgba(99, 102, 241, 0.05);
-        border-color: rgba(99, 102, 241, 0.3);
+        background: rgba(34, 197, 94, 0.06);
+        border-color: rgba(34, 197, 94, 0.3);
         color: #f1f5f9;
     }
 
     .option-btn.selected {
-        background: rgba(99, 102, 241, 0.1);
+        background: rgba(34, 197, 94, 0.12);
         border-color: var(--primary);
         color: #f8fafc;
-        box-shadow: var(--glow-indigo);
+        box-shadow: var(--glow-surface);
     }
 
     .option-indicator {
@@ -426,15 +426,15 @@
         font-size: 1rem;
         font-weight: 600;
         cursor: pointer;
-        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+        box-shadow: 0 8px 24px rgba(3, 7, 18, 0.22);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .submit-btn:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow:
-            0 12px 30px rgba(99, 102, 241, 0.3),
-            var(--glow-cyan);
+            0 12px 30px rgba(3, 7, 18, 0.28),
+            var(--glow-primary);
     }
 
     .submit-btn:disabled {
@@ -480,8 +480,8 @@
 
     .score-radial.success {
         border-color: var(--secondary);
-        background: rgba(6, 182, 212, 0.02);
-        box-shadow: var(--glow-cyan);
+        background: rgba(34, 197, 94, 0.04);
+        box-shadow: var(--glow-primary);
     }
 
     .score-radial.perfect {
@@ -539,7 +539,7 @@
     }
 
     .verified-badge {
-        background: rgba(6, 182, 212, 0.1);
+        background: rgba(34, 197, 94, 0.1);
         border: 1px solid var(--secondary);
         color: var(--secondary);
     }

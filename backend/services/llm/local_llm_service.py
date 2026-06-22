@@ -3,12 +3,10 @@ import json
 import hashlib
 import time
 import socket
-from pathlib import Path
-from dotenv import load_dotenv
 import ollama
 from ollama import Client
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+from backend.config import settings
 
 class OllamaConnectionError(Exception):
     """Custom exception raised when Ollama service is not running or unreachable."""
@@ -18,8 +16,8 @@ class LocalLLMService:
     def __init__(self):
         """Initializes the LocalLLMService with configurations and cache."""
         # Read from environment variables, fallback to defaults
-        self.model_name = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        self.host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.model_name = settings.ollama_model
+        self.host = settings.ollama_host
 
         # Parse Host IP/Port for a quick socket pre-check (avoids long http timeouts)
         self.host_ip, self.host_port = self._parse_host(self.host)
@@ -29,7 +27,7 @@ class LocalLLMService:
         self.client = Client(host=self.host, timeout=self.timeout)
 
         # Local Persistent Cache File Setup
-        self.cache_file = os.path.join(os.path.dirname(__file__), "..", "..", "llm_cache.json")
+        self.cache_file = str(settings.llm_cache_path)
         self.cache = self._load_cache()
 
         # Verify connection on startup

@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 import io
-from backend.services.local_llm_service import LocalLLMService
+from backend.services.llm.local_llm_service import LocalLLMService
 
 
 class OCRService:

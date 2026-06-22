@@ -377,12 +377,12 @@
 
     .play-btn {
         background: linear-gradient(135deg, var(--primary), var(--secondary));
-        box-shadow: var(--glow-indigo);
+        box-shadow: var(--glow-surface);
     }
 
     .play-btn:hover {
         transform: translateY(-2px);
-        box-shadow: 0 0 15px rgba(99, 102, 241, 0.35);
+        box-shadow: 0 8px 20px rgba(3, 7, 18, 0.24);
     }
 
     .play-btn:active {
@@ -390,14 +390,14 @@
     }
 
     .pause-btn, .resume-btn {
-        background: rgba(6, 182, 212, 0.1);
-        border: 1px solid rgba(6, 182, 212, 0.25);
+        background: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.25);
         color: var(--secondary);
     }
 
     .pause-btn:hover, .resume-btn:hover {
-        background: rgba(6, 182, 212, 0.18);
-        box-shadow: var(--glow-cyan);
+        background: rgba(34, 197, 94, 0.18);
+        box-shadow: var(--glow-primary);
         transform: translateY(-2px);
     }
 
@@ -516,9 +516,9 @@
 
     :global(.tts-word.current-word) {
         color: #ffffff !important; /* Glowing white text */
-        background: rgba(99, 102, 241, 0.5) !important; /* Glowing Indigo capsule */
+        background: rgba(34, 197, 94, 0.42) !important;
         transform: scale(1.06) translateY(-1px);
-        box-shadow: 0 0 15px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.4);
+        box-shadow: 0 4px 12px rgba(3, 7, 18, 0.24);
         opacity: 1 !important;
         font-weight: 600;
         z-index: 2;
@@ -531,7 +531,7 @@
         left: 0;
         width: 100%;
         height: 2px;
-        background: linear-gradient(90deg, #00f0ff, #10b981);
+        background: linear-gradient(90deg, #22c55e, #86efac);
         border-radius: 2px;
         animation: active-underline 0.3s ease-out forwards;
     }
@@ -545,8 +545,8 @@
     :global(.highlighter-viewport.narration-active .tts-word.spoken-word) {
         color: var(--text-primary) !important; /* fully readable */
         opacity: 0.95;
-        background: rgba(6, 182, 212, 0.08); /* Soft Cyan highlight wash */
-        border-bottom: 1.5px dashed rgba(6, 182, 212, 0.3); /* Soft progress indicator dashed underline */
+        background: rgba(34, 197, 94, 0.08);
+        border-bottom: 1.5px dashed rgba(34, 197, 94, 0.3);
     }
 
     :global(.highlighter-viewport.narration-active .tts-word.pending-word) {

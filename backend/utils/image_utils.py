@@ -1,7 +1,6 @@
 import os
 import cv2
 import numpy as np
-from PIL import Image
 from datetime import datetime
 
 # Maximum file size allowed: 10 MB
@@ -49,21 +48,6 @@ def load_image_from_bytes(image_bytes: bytes) -> np.ndarray:
     if image is None:
         raise ValueError("Failed to decode image. The file may be corrupted or in an unsupported format.")
     return image
-
-def convert_cv2_to_pil(cv2_image: np.ndarray) -> Image.Image:
-    """
-    Converts an OpenCV BGR image array to a PIL Image (RGB).
-    
-    Args:
-        cv2_image (np.ndarray): The OpenCV image in BGR format.
-        
-    Returns:
-        Image.Image: The converted PIL Image in RGB format.
-    """
-    rgb_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(rgb_image)
-
-
 
 def save_uploaded_image(image_bytes: bytes, original_filename: str, upload_dir: str = "uploads") -> str:
     """

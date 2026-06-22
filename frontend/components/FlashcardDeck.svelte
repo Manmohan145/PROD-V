@@ -146,18 +146,18 @@
         box-shadow:
             0 15px 35px rgba(0, 0, 0, 0.3),
             inset 0 1px 1px rgba(255, 255, 255, 0.05),
-            var(--glow-indigo);
+            var(--glow-surface);
         color: #f1f5f9;
     }
 
     /* Back Card Styling */
     .card-back {
         background: rgba(18, 20, 36, 0.85);
-        border: 1px solid rgba(6, 182, 212, 0.15);
+        border: 1px solid rgba(34, 197, 94, 0.18);
         box-shadow:
             0 15px 35px rgba(0, 0, 0, 0.4),
-            inset 0 1px 1px rgba(6, 182, 212, 0.1),
-            var(--glow-cyan);
+            inset 0 1px 1px rgba(34, 197, 94, 0.1),
+            var(--glow-primary);
         color: #f1f5f9;
         transform: rotateY(180deg);
     }
@@ -172,11 +172,11 @@
     }
 
     .card-front .card-glow {
-        background: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0) 70%);
+        background: radial-gradient(circle at 50% -20%, rgba(22, 163, 74, 0.12) 0%, rgba(22, 163, 74, 0) 70%);
     }
 
     .card-back .card-glow {
-        background: radial-gradient(circle at 50% -20%, rgba(6, 182, 212, 0.12) 0%, rgba(6, 182, 212, 0) 70%);
+        background: radial-gradient(circle at 50% -20%, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0) 70%);
     }
 
     .card-badge {
@@ -195,8 +195,8 @@
 
     .back-badge {
         color: var(--secondary);
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.15);
+        background: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.18);
     }
 
     .card-text {
@@ -271,8 +271,8 @@
     }
 
     .nav-btn:hover {
-        background: rgba(99, 102, 241, 0.05);
-        border-color: rgba(99, 102, 241, 0.2);
+        background: rgba(22, 163, 74, 0.06);
+        border-color: rgba(34, 197, 94, 0.22);
         color: #f8fafc;
         transform: translateY(-1px);
     }

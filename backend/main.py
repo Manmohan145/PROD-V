@@ -1,32 +1,18 @@
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import uvicorn
-from dotenv import dotenv_values, load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-
-BACKEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BACKEND_DIR.parent
-GENERATED_IMAGE_DIR = PROJECT_ROOT / "uploads" / "generated"
-
-load_dotenv(BACKEND_DIR / ".env", override=False)
-legacy_env = dotenv_values(PROJECT_ROOT / ".env")
-for legacy_key in ("OLLAMA_MODEL", "OLLAMA_HOST"):
-    legacy_value = legacy_env.get(legacy_key)
-    if legacy_value:
-        os.environ.setdefault(legacy_key, legacy_value)
-
+from backend.config import settings
 from backend.database.history_db import init_db
 from backend.routes.api_routes import router
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    GENERATED_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    settings.generated_image_dir.mkdir(parents=True, exist_ok=True)
     init_db()
     yield
 
@@ -49,10 +35,10 @@ app.add_middleware(
 )
 
 app.include_router(router)
-GENERATED_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+settings.generated_image_dir.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/generated-images",
-    StaticFiles(directory=GENERATED_IMAGE_DIR),
+    StaticFiles(directory=settings.generated_image_dir),
     name="generated-images",
 )
 

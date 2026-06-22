@@ -6,10 +6,13 @@ from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from pydantic import BaseModel
 
 # Import backend modules
-from backend.services.detector import ObjectDetector
-from backend.services.local_llm_service import LocalLLMService
-from backend.services.ocr_service import OCRService
-from backend.services.flux_image_service import FluxImageService, ImageGenerationError
+from backend.services.vision.detector import ObjectDetector
+from backend.services.llm.local_llm_service import LocalLLMService
+from backend.services.ocr.ocr_service import OCRService
+from backend.services.image_generation.flux_image_service import (
+    FluxImageService,
+    ImageGenerationError,
+)
 from backend.utils.image_utils import (
     validate_image_file,
     load_image_from_bytes,

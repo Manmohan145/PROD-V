@@ -5,7 +5,6 @@
     import HistoryPanel from '$components/HistoryPanel.svelte';
     import ReadingHighlighter from '$components/ReadingHighlighter.svelte';
     import { API_BASE, resolveApiAsset } from '$lib/api.js';
-    import { marked } from 'marked';
 
     // Global App States
     let activeTab = $state('📸 Image Scanner');
@@ -60,6 +59,13 @@
     let generatedImageUrl = $state('');
     let imageGenerationError = $state('');
     let generationHistory = $state([]);
+
+    function releaseUploadPreview() {
+        if (uploadPreviewUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(uploadPreviewUrl);
+        }
+        uploadPreviewUrl = '';
+    }
 
     const educationalProfiles = {
         'Tiger': {
@@ -454,6 +460,7 @@ This specimen represents an everyday concept or organism. Key details are proces
 
     onDestroy(() => {
         stopWebcam();
+        releaseUploadPreview();
     });
 
     // ------------------------------------------------
@@ -472,6 +479,7 @@ This specimen represents an everyday concept or organism. Key details are proces
         scanStep = 0;
 
         // Generate a local preview URL for progressive scanning feed visual representation
+        releaseUploadPreview();
         uploadPreviewUrl = URL.createObjectURL(fileObj);
 
         if (enableDemoMode) {
@@ -929,17 +937,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         }, 600);
     }
 
-    // Markdown Parser Helper
-    function parseMarkdown(md) {
-        if (!md) return '';
-        try {
-            return marked.parse(md);
-        } catch (e) {
-            console.error('Markdown compilation error:', e);
-            return md;
-        }
-    }
-
     async function startWorkspaceSession(target, subTab = 'quiz') {
         activeTab = '🎓 Study Workspace';
         learningTarget = target;
@@ -1123,7 +1120,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             <span class="logo-eye">👁️</span>
             <h2>VisionAI</h2>
         </div>
-        <p class="sidebar-tagline">Interactive AI Learning Assistant</p>
+        <p class="sidebar-tagline">AI Research & Learning Platform</p>
 
         <!-- Navigation Menu -->
         <nav class="sidebar-nav">
@@ -1232,11 +1229,11 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                         <span class="lbl">STREAK</span>
                         <span class="val">🔥 {studyStreak} Days</span>
                     </div>
-                    <div class="hud-stat-badge violet-glow">
+                    <div class="hud-stat-badge accent-glow">
                         <span class="lbl">TODAY</span>
                         <span class="val">👁️ {dailyDiscoveryCount} Scans</span>
                     </div>
-                    <div class="hud-stat-badge cyan-glow">
+                    <div class="hud-stat-badge primary-glow">
                         <span class="lbl">ARCHIVE</span>
                         <span class="val">👁️ {totalSpecimensCount} Logged</span>
                     </div>
@@ -1252,15 +1249,15 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         <!-- Demo Mode metrics dashboard overlay -->
         {#if enableDemoMode}
             <section class="demo-metrics-panel">
-                <div class="metric-card indigo-glow">
+                <div class="metric-card surface-glow">
                     <span class="lbl">Last Detected Label</span>
                     <span class="num">{selectedExploreLabel || 'None'}</span>
                 </div>
-                <div class="metric-card cyan-glow">
+                <div class="metric-card primary-glow">
                     <span class="lbl">Inference Latency</span>
                     <span class="num">{analysisResult ? `${analysisResult.latency_ms.toFixed(1)} ms` : '0.0 ms'}</span>
                 </div>
-                <div class="metric-card violet-glow">
+                <div class="metric-card accent-glow">
                     <span class="lbl">Detections Count</span>
                     <span class="num">{analysisResult ? analysisResult.detections.length : 0}</span>
                 </div>
@@ -1298,7 +1295,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                             <button
                                                 type="button"
                                                 class="ctrl-btn play-btn"
-                                                style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; cursor: pointer; color: white; background: linear-gradient(135deg, var(--primary), var(--secondary)); box-shadow: var(--glow-indigo);"
+                                                style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; cursor: pointer; color: white; background: linear-gradient(135deg, var(--primary), var(--secondary)); box-shadow: var(--glow-surface);"
                                                 onclick={runDemoSimulation}
                                             >
                                                 <span>✨ Run Simulated Tiger Scan</span>
@@ -1347,7 +1344,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                                     {#if generationAction}
                                                         <button
                                                             class="action-btn"
-                                                            style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; background: rgba(0, 222, 148, 0.1); border: 1px solid rgba(0, 222, 148, 0.2); color: var(--secondary);"
+                                                            style="padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); color: var(--accent);"
                                                             onclick={() => generateForDetectedObject(det.label)}
                                                             title={generationAction.title}
                                                         >
@@ -1410,15 +1407,15 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                                 <span class="level-indicator">{currentProfile.level}</span>
                                             </div>
                                             <div class="enrichment-grid">
-                                                <div class="enrich-item glow-indigo">
+                                                <div class="enrich-item glow-surface">
                                                     <span class="enrich-title">💡 Fun Fact</span>
                                                     <p class="enrich-text">{currentProfile.funFact}</p>
                                                 </div>
-                                                <div class="enrich-item glow-cyan">
+                                                <div class="enrich-item glow-primary">
                                                     <span class="enrich-title">❓ Did You Know?</span>
                                                     <p class="enrich-text">{currentProfile.didYouKnow}</p>
                                                 </div>
-                                                <div class="enrich-item glow-violet">
+                                                <div class="enrich-item glow-accent">
                                                     <span class="enrich-title">🚀 Real-World Applications</span>
                                                     <p class="enrich-text">{currentProfile.applications}</p>
                                                 </div>
@@ -1613,7 +1610,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                             {#if learningData && getObjectGenerationAction(learningTarget)}
                                                 <button
                                                     class="generate-learn-btn"
-                                                    style="background: rgba(0, 222, 148, 0.15); border: 1px solid rgba(0, 222, 148, 0.25); color: var(--secondary); height: 50px; padding: 14px 20px;"
+                                                    style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.28); color: var(--accent); height: 50px; padding: 14px 20px;"
                                                     onclick={() => generateForDetectedObject(learningTarget)}
                                                 >
                                                     {getObjectGenerationAction(learningTarget).icon} {getObjectGenerationAction(learningTarget).title}
@@ -1960,13 +1957,13 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                         <p class="section-subtitle">Tactical flow mapping specimen capture to local generative synthesis</p>
 
                         <div class="manual-pipeline">
-                            <div class="pipeline-node indigo-glow">
+                            <div class="pipeline-node surface-glow">
                                 <span class="icon">📸</span>
                                 <span class="lbl">Capture Feed</span>
                                 <span class="desc">Snapshot snap / file upload</span>
                             </div>
                             <div class="pipeline-arrow">➔</div>
-                            <div class="pipeline-node cyan-glow">
+                            <div class="pipeline-node primary-glow">
                                 <span class="icon">🧠</span>
                                 <span class="lbl">Vision Inference</span>
                                 <span class="desc">YOLOv8 / MobileNet engine</span>
@@ -2069,8 +2066,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     /* Sidebar Panels */
     .sidebar {
         width: 280px;
-        background: rgba(11, 15, 27, 0.7);
-        backdrop-filter: blur(25px);
+        background: rgba(17, 24, 39, 0.94);
+        backdrop-filter: blur(18px);
         border-right: 1px solid var(--border);
         padding: 2rem 1.5rem;
         display: flex;
@@ -2087,7 +2084,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .logo-eye {
         font-size: 2rem;
-        animation: float-eye 4s ease-in-out infinite;
+        animation: float-eye 5s ease-in-out infinite;
     }
 
     @keyframes float-eye {
@@ -2137,17 +2134,17 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .nav-item.active {
-        background: linear-gradient(135deg, rgba(0, 255, 255, 0.12), rgba(0, 222, 148, 0.12));
-        border: 1px solid rgba(0, 255, 255, 0.25);
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(22, 163, 74, 0.1));
+        border: 1px solid rgba(134, 239, 172, 0.28);
         color: var(--primary);
         font-weight: 600;
-        box-shadow: var(--glow-indigo);
+        box-shadow: var(--glow-surface);
     }
 
     /* Sidebar settings */
     .sidebar-section {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.04);
+        background: rgba(31, 41, 55, 0.45);
+        border: 1px solid var(--border);
         border-radius: 16px;
         padding: 1.2rem;
     }
@@ -2272,12 +2269,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         letter-spacing: -0.02em;
     }
 
-    .header-desc {
-        margin: 0;
-        font-size: 1.05rem;
-        color: var(--text-secondary);
-    }
-
     /* Demo dashboard overlay */
     .demo-metrics-panel {
         display: grid;
@@ -2301,10 +2292,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         transform: translateY(-4px);
     }
 
-    .indigo-glow:hover { box-shadow: var(--glow-indigo); border-color: rgba(0, 255, 255, 0.3); }
-    .cyan-glow:hover { box-shadow: var(--glow-cyan); border-color: rgba(0, 174, 255, 0.3); }
-    .violet-glow:hover { box-shadow: 0 0 25px rgba(0, 255, 82, 0.15); border-color: rgba(0, 255, 82, 0.3); }
-    .yellow-glow:hover { box-shadow: 0 0 25px rgba(0, 255, 255, 0.15); border-color: rgba(0, 255, 255, 0.3); }
+    .surface-glow:hover { box-shadow: var(--glow-surface); border-color: rgba(134, 239, 172, 0.26); }
+    .primary-glow:hover { box-shadow: var(--glow-primary); border-color: rgba(34, 197, 94, 0.3); }
+    .accent-glow:hover { box-shadow: var(--glow-emerald); border-color: rgba(22, 163, 74, 0.3); }
+    .yellow-glow:hover { box-shadow: var(--glow-primary); border-color: rgba(134, 239, 172, 0.3); }
 
     .metric-card .lbl {
         font-size: 0.8rem;
@@ -2327,7 +2318,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         border: 1px solid var(--border);
         border-radius: 20px;
         padding: 2rem;
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        box-shadow: var(--shadow-card);
         box-sizing: border-box;
     }
 
@@ -2370,7 +2361,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .file-dropzone:hover {
         border-color: var(--primary);
-        background: rgba(99, 102, 241, 0.02);
+        background: rgba(34, 197, 94, 0.05);
     }
 
     .picker-label {
@@ -2384,19 +2375,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     .picker-label span {
         font-weight: 500;
         font-size: 0.95rem;
-    }
-
-    .analyzer-loading {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-top: 1.5rem;
-        gap: 10px;
-    }
-
-    .analyzer-loading p {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
     }
 
     .spinner {
@@ -2460,13 +2438,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         font-size: 1.05rem;
         font-weight: 600;
         color: var(--text-primary);
-    }
-
-    .image-output {
-        margin-top: 1.5rem;
-        border-radius: 14px;
-        overflow: hidden;
-        border: 1px solid var(--border);
     }
 
     .annotated-img {
@@ -2552,13 +2523,13 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .tts-btn.play {
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.2);
-        color: #06b6d4;
+        background: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.25);
+        color: var(--accent);
     }
 
     .tts-btn.play:hover {
-        background: rgba(6, 182, 212, 0.16);
+        background: rgba(34, 197, 94, 0.18);
         transform: translateY(-1px);
     }
 
@@ -2651,6 +2622,14 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         text-align: center;
         color: var(--text-muted);
         gap: 12px;
+        background: rgba(31, 41, 55, 0.35);
+        border: 1px dashed var(--border);
+        border-radius: 16px;
+    }
+
+    .empty-facts-state svg {
+        color: var(--accent);
+        opacity: 0.85;
     }
 
     .empty-facts-state p {
@@ -2705,9 +2684,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .chat-bubble.user {
         align-self: flex-end;
-        background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(0, 222, 148, 0.15));
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.14), rgba(22, 163, 74, 0.12));
         color: var(--text-primary);
-        border: 1px solid rgba(0, 255, 255, 0.2);
+        border: 1px solid rgba(134, 239, 172, 0.24);
     }
 
     .sender-tag {
@@ -2771,7 +2750,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .chat-form input:focus {
         border-color: var(--accent);
-        box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
+        box-shadow: 0 8px 22px rgba(3, 7, 18, 0.18);
     }
 
     .chat-form button {
@@ -2847,7 +2826,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         border-radius: 12px;
         font-weight: 600;
         cursor: pointer;
-        box-shadow: var(--glow-indigo);
+        box-shadow: var(--glow-surface);
         transition: all 0.3s ease;
     }
 
@@ -3061,7 +3040,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .viva-expander[open] {
         background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(6, 182, 212, 0.2);
+        border-color: rgba(34, 197, 94, 0.25);
     }
 
     .viva-expander summary {
@@ -3116,7 +3095,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .ocr-upload-lbl:hover {
         border-color: var(--accent);
-        background: rgba(6, 182, 212, 0.02);
+        background: rgba(34, 197, 94, 0.04);
     }
 
     .ocr-upload-lbl input {
@@ -3159,9 +3138,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     .ocr-badge {
         font-size: 0.72rem;
         font-weight: 700;
-        background: rgba(6, 182, 212, 0.1);
+        background: rgba(34, 197, 94, 0.1);
         color: var(--accent);
-        border: 1px solid rgba(6, 182, 212, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.25);
         padding: 2px 8px;
         border-radius: 4px;
     }
@@ -3180,17 +3159,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         line-height: 1.4;
         resize: none;
         outline: none;
-    }
-
-    .scroll-box {
-        height: 350px;
-        overflow-y: auto;
-        background: rgba(0, 0, 0, 0.15);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 1.2rem;
-        box-sizing: border-box;
-        margin-bottom: 1rem;
     }
 
     .download-btn {
@@ -3325,9 +3293,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         border-color: rgba(16, 185, 129, 0.3);
     }
 
-    .cyan-glow:hover {
-        box-shadow: var(--glow-cyan);
-        border-color: rgba(6, 182, 212, 0.3);
+    .primary-glow:hover {
+        box-shadow: var(--glow-primary);
+        border-color: rgba(34, 197, 94, 0.3);
     }
 
     /* Fact Ticker */
@@ -3335,8 +3303,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        background: rgba(99, 102, 241, 0.05);
-        border: 1px solid rgba(99, 102, 241, 0.15);
+        background: rgba(22, 163, 74, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.2);
         border-radius: 12px;
         padding: 10px 16px;
         margin-bottom: 1.5rem;
@@ -3397,7 +3365,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         font-size: 0.9rem;
         font-weight: 700;
         color: var(--secondary);
-        text-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+        text-shadow: none;
         letter-spacing: 0.15em;
         animation: pulse-hud 1.5s infinite ease-in-out;
         pointer-events: none;
@@ -3462,14 +3430,14 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         transform: translateY(-4px);
     }
 
-    .pipeline-node.indigo-glow:hover {
-        box-shadow: var(--glow-indigo);
-        border-color: rgba(99, 102, 241, 0.3);
+    .pipeline-node.surface-glow:hover {
+        box-shadow: var(--glow-surface);
+        border-color: rgba(22, 163, 74, 0.3);
     }
 
-    .pipeline-node.cyan-glow:hover {
-        box-shadow: var(--glow-cyan);
-        border-color: rgba(6, 182, 212, 0.3);
+    .pipeline-node.primary-glow:hover {
+        box-shadow: var(--glow-primary);
+        border-color: rgba(34, 197, 94, 0.3);
     }
 
     .pipeline-node.emerald-glow:hover {
@@ -3622,8 +3590,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     /* Specimen Action Suite styling */
     .hud-study-actions {
-        background: rgba(99, 102, 241, 0.03);
-        border: 1px solid rgba(99, 102, 241, 0.1);
+        background: rgba(22, 163, 74, 0.05);
+        border: 1px solid rgba(55, 65, 81, 0.9);
         border-radius: 16px;
         padding: 1.25rem;
         margin-top: 1.5rem;
@@ -3675,18 +3643,18 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .hud-study-actions .action-btn:hover {
-        background: rgba(99, 102, 241, 0.08);
-        border-color: rgba(99, 102, 241, 0.25);
+        background: rgba(22, 163, 74, 0.1);
+        border-color: rgba(34, 197, 94, 0.28);
         color: #f1f5f9;
         transform: translateY(-1px);
-        box-shadow: var(--glow-indigo);
+        box-shadow: var(--glow-surface);
     }
 
     .hud-study-actions .action-btn.compare-btn:hover {
-        background: rgba(6, 182, 212, 0.08);
-        border-color: rgba(6, 182, 212, 0.25);
+        background: rgba(34, 197, 94, 0.08);
+        border-color: rgba(134, 239, 172, 0.25);
         color: #f1f5f9;
-        box-shadow: var(--glow-cyan);
+        box-shadow: var(--glow-primary);
     }
 
     /* Scanner step telemetry/badges styling */
@@ -3705,21 +3673,21 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .status-info {
-        background: rgba(99, 102, 241, 0.08);
-        border: 1px solid rgba(99, 102, 241, 0.2);
+        background: rgba(22, 163, 74, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.24);
         color: var(--primary);
     }
 
     .status-loading {
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.2);
+        background: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(134, 239, 172, 0.22);
         color: var(--secondary);
     }
 
     .status-compiling {
-        background: rgba(168, 85, 247, 0.08);
-        border: 1px solid rgba(168, 85, 247, 0.2);
-        color: #a855f7;
+        background: rgba(22, 163, 74, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        color: var(--primary-dark);
     }
 
     .status-ready {
@@ -3760,7 +3728,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         width: 100%;
         height: 100%;
         border-radius: 50%;
-        background: rgba(6, 182, 212, 0.15);
+        background: rgba(34, 197, 94, 0.12);
         animation: pulse-ring 1.8s cubic-bezier(0.215, 0.610, 0.355, 1) infinite;
         z-index: 1;
     }
@@ -3768,24 +3736,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     @keyframes pulse-ring {
         0% { transform: scale(0.65); opacity: 1; }
         100% { transform: scale(1.6); opacity: 0; }
-    }
-
-    .discovery-loading-spinner {
-        width: 50px;
-        height: 50px;
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .spinner-core {
-        width: 36px;
-        height: 36px;
-        border: 3px solid rgba(6, 182, 212, 0.1);
-        border-top-color: var(--secondary);
-        border-radius: 50%;
-        animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
 
     .discovery-text {
@@ -3801,8 +3751,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     @keyframes active-pulse-btn {
-        0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.2); }
-        50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.45); }
+        0%, 100% { box-shadow: 0 6px 16px rgba(3, 7, 18, 0.16); }
+        50% { box-shadow: 0 10px 24px rgba(34, 197, 94, 0.18); }
     }
 
     /* Global polish micro-interactions */
@@ -3932,14 +3882,14 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         margin-bottom: 0.4rem;
         letter-spacing: 0.05em;
     }
-    .enrich-item.glow-indigo .enrich-title { color: #00ffff; }
-    .enrich-item.glow-indigo:hover { border-color: rgba(0, 255, 255, 0.3); box-shadow: 0 0 15px rgba(0, 255, 255, 0.08); }
-    .enrich-item.glow-cyan .enrich-title { color: #00aeff; }
-    .enrich-item.glow-cyan:hover { border-color: rgba(0, 174, 255, 0.3); box-shadow: 0 0 15px rgba(0, 174, 255, 0.08); }
-    .enrich-item.glow-violet .enrich-title { color: #00de94; }
-    .enrich-item.glow-violet:hover { border-color: rgba(0, 222, 148, 0.3); box-shadow: 0 0 15px rgba(0, 222, 148, 0.08); }
-    .enrich-item.glow-emerald .enrich-title { color: #00ff52; }
-    .enrich-item.glow-emerald:hover { border-color: rgba(0, 255, 82, 0.3); box-shadow: 0 0 15px rgba(0, 255, 82, 0.08); }
+    .enrich-item.glow-surface .enrich-title { color: #22c55e; }
+    .enrich-item.glow-surface:hover { border-color: rgba(34, 197, 94, 0.3); box-shadow: 0 10px 24px rgba(3, 7, 18, 0.18); }
+    .enrich-item.glow-primary .enrich-title { color: #86efac; }
+    .enrich-item.glow-primary:hover { border-color: rgba(134, 239, 172, 0.3); box-shadow: 0 10px 24px rgba(3, 7, 18, 0.18); }
+    .enrich-item.glow-accent .enrich-title { color: #16a34a; }
+    .enrich-item.glow-accent:hover { border-color: rgba(22, 163, 74, 0.3); box-shadow: 0 10px 24px rgba(3, 7, 18, 0.18); }
+    .enrich-item.glow-emerald .enrich-title { color: #86efac; }
+    .enrich-item.glow-emerald:hover { border-color: rgba(134, 239, 172, 0.3); box-shadow: 0 10px 24px rgba(3, 7, 18, 0.18); }
     .enrich-text {
         margin: 0;
         font-size: 0.85rem;
@@ -3980,8 +3930,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
     .badge-item:hover {
         transform: translateX(2px);
-        border-color: rgba(99, 102, 241, 0.2);
-        background: rgba(99, 102, 241, 0.03);
+        border-color: rgba(34, 197, 94, 0.2);
+        background: rgba(22, 163, 74, 0.05);
     }
     .badge-icon {
         font-size: 1rem;
@@ -4034,8 +3984,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .new-chat-btn {
-        background: rgba(0, 255, 255, 0.06);
-        border: 1px solid rgba(0, 255, 255, 0.15);
+        background: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.2);
         color: var(--primary);
         padding: 6px 12px;
         border-radius: 8px;
@@ -4049,8 +3999,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .new-chat-btn:hover {
-        background: rgba(0, 255, 255, 0.15);
-        box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        background: rgba(34, 197, 94, 0.16);
+        box-shadow: 0 8px 18px rgba(3, 7, 18, 0.18);
     }
 
     .chat-history-list {
@@ -4068,9 +4018,13 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         justify-content: center;
         height: 100%;
         color: var(--text-muted);
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         text-align: center;
-        padding: 2rem 0;
+        padding: 2rem 1rem;
+        background: rgba(31, 41, 55, 0.25);
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        line-height: 1.5;
     }
 
     .history-chat-item {
@@ -4090,13 +4044,13 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .history-chat-item:hover {
         background: rgba(255, 255, 255, 0.03);
-        border-color: rgba(0, 255, 255, 0.15);
+        border-color: rgba(34, 197, 94, 0.2);
     }
 
     .selected-chat {
-        background: rgba(0, 255, 255, 0.04) !important;
+        background: rgba(34, 197, 94, 0.07) !important;
         border-color: var(--primary) !important;
-        box-shadow: 0 0 15px rgba(0, 255, 255, 0.06);
+        box-shadow: 0 10px 22px rgba(3, 7, 18, 0.16);
     }
 
     .history-chat-thumb {
@@ -4138,7 +4092,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         width: 22px;
         height: 22px;
         border-radius: 50%;
-        border: 1px solid rgba(0, 255, 255, 0.18);
+        border: 1px solid rgba(34, 197, 94, 0.22);
         background: rgba(10, 15, 25, 0.9);
         color: var(--primary);
         cursor: pointer;
@@ -4153,7 +4107,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .history-regenerate-btn:hover {
-        background: rgba(0, 255, 255, 0.14);
+        background: rgba(34, 197, 94, 0.14);
         transform: translateY(-50%) rotate(-25deg) scale(1.08);
     }
 
@@ -4267,7 +4221,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .welcome-logo {
         font-size: 3rem;
-        filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.3));
+        filter: drop-shadow(0 8px 12px rgba(3, 7, 18, 0.3));
         margin-bottom: 4px;
     }
 
@@ -4311,8 +4265,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .suggestion-card-btn:hover {
-        background: rgba(0, 255, 255, 0.03);
-        border-color: rgba(0, 255, 255, 0.25);
+        background: rgba(34, 197, 94, 0.05);
+        border-color: rgba(34, 197, 94, 0.25);
         transform: translateY(-2px);
     }
 
@@ -4333,7 +4287,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         flex-direction: column;
         gap: 8px;
         box-sizing: border-box;
-        border-top: 1px solid rgba(0, 255, 255, 0.05);
+        border-top: 1px solid rgba(55, 65, 81, 0.9);
         background: rgba(4, 8, 14, 0.3);
         padding-top: 16px;
     }
@@ -4351,7 +4305,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     .chatgpt-input-box:focus-within, .focused-input {
         border-color: var(--primary);
-        box-shadow: 0 0 15px rgba(0, 255, 255, 0.15);
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
         background: rgba(0, 0, 0, 0.4);
     }
 

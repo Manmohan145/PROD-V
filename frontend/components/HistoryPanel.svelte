@@ -80,7 +80,7 @@
         </div>
     {:else if history.length === 0}
         <div class="empty-state">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--primary)" stroke-width="1.5" style="filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3)); margin-bottom: 1.5rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--primary)" stroke-width="1.5" style="filter: drop-shadow(0 6px 8px rgba(3, 7, 18, 0.28)); margin-bottom: 1.5rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             <p>Your local scan history archive is currently empty.</p>
             <span>Once you capture or upload specimens, their diagnostic history will be recorded here.</span>
         </div>
@@ -248,9 +248,9 @@
     .conf-badge {
         font-size: 0.8rem;
         font-weight: 600;
-        color: #06b6d4;
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.2);
+        color: var(--accent);
+        background: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.22);
         padding: 2px 8px;
         border-radius: 6px;
     }
@@ -321,8 +321,8 @@
     .spinner {
         width: 32px;
         height: 32px;
-        border: 3px solid rgba(6, 182, 212, 0.1);
-        border-top-color: #06b6d4;
+        border: 3px solid rgba(34, 197, 94, 0.1);
+        border-top-color: var(--primary);
         border-radius: 50%;
         animation: spin 1s infinite linear;
         margin-bottom: 1rem;

@@ -1,18 +1,13 @@
-import os
 from pathlib import Path
 from uuid import uuid4
 
-from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 from PIL import Image, ImageOps
 
+from backend.config import settings
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = BACKEND_DIR.parent
-ENV_PATH = BACKEND_DIR / ".env"
-GENERATED_IMAGE_DIR = PROJECT_ROOT / "uploads" / "generated"
-
-load_dotenv(ENV_PATH, override=False)
+PROJECT_ROOT = settings.project_root
+GENERATED_IMAGE_DIR = settings.generated_image_dir
 
 
 class ImageGenerationError(RuntimeError):
@@ -26,7 +21,7 @@ class FluxImageService:
         self.output_dir = output_dir.resolve()
 
     def _get_api_key(self) -> str:
-        api_key = os.getenv("HUGGINGFACE_API_KEY", "").strip()
+        api_key = settings.huggingface_api_key
         if not api_key or api_key == "hf_your_token_here":
             raise ImageGenerationError(
                 "HUGGINGFACE_API_KEY is not configured in backend/.env"
