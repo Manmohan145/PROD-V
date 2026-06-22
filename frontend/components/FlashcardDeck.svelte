@@ -37,7 +37,7 @@
         <!-- 3D Card Wrapper -->
         <div class="card-perspective" onclick={handleFlip} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && handleFlip()}>
             <div class="card-inner" class:flipped={isFlipped}>
-                
+
                 <!-- Card Front -->
                 <div class="card-face card-front">
                     <div class="card-glow"></div>
@@ -108,12 +108,20 @@
         width: 100%;
         height: 100%;
         text-align: center;
-        transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.15);
         transform-style: preserve-3d;
     }
 
     .card-inner.flipped {
         transform: rotateY(180deg);
+    }
+
+    .card-perspective:hover .card-inner:not(.flipped) {
+        transform: translateY(-6px) rotateX(4deg);
+    }
+
+    .card-perspective:hover .card-inner.flipped {
+        transform: translateY(-6px) rotateY(180deg) rotateX(-4deg);
     }
 
     .card-face {
@@ -135,8 +143,8 @@
     .card-front {
         background: var(--bg-card);
         border: 1px solid rgba(255, 255, 255, 0.05);
-        box-shadow: 
-            0 15px 35px rgba(0, 0, 0, 0.3), 
+        box-shadow:
+            0 15px 35px rgba(0, 0, 0, 0.3),
             inset 0 1px 1px rgba(255, 255, 255, 0.05),
             var(--glow-indigo);
         color: #f1f5f9;
@@ -146,8 +154,8 @@
     .card-back {
         background: rgba(18, 20, 36, 0.85);
         border: 1px solid rgba(6, 182, 212, 0.15);
-        box-shadow: 
-            0 15px 35px rgba(0, 0, 0, 0.4), 
+        box-shadow:
+            0 15px 35px rgba(0, 0, 0, 0.4),
             inset 0 1px 1px rgba(6, 182, 212, 0.1),
             var(--glow-cyan);
         color: #f1f5f9;

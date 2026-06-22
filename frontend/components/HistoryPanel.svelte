@@ -1,8 +1,9 @@
 <script>
     import { onMount } from 'svelte';
-    
+    import { API_BASE } from '$lib/api.js';
+
     let { onInspect, onUpdateCount } = $props();
-    
+
     let history = $state([]);
     let loading = $state(true);
     let errorMsg = $state('');
@@ -11,7 +12,7 @@
         loading = true;
         errorMsg = '';
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/history');
+            const res = await fetch(`${API_BASE}/api/history`);
             if (!res.ok) throw new Error('Failed to fetch scan history');
             history = await res.json();
             if (onUpdateCount) onUpdateCount(history.length);
@@ -25,7 +26,7 @@
 
     async function deleteRecord(id) {
         try {
-            const res = await fetch(`http://127.0.0.1:8000/api/history/${id}`, {
+            const res = await fetch(`${API_BASE}/api/history/${id}`, {
                 method: 'DELETE'
             });
             if (!res.ok) throw new Error('Failed to delete record');
@@ -40,7 +41,7 @@
     async function clearAll() {
         if (!confirm('Are you sure you want to permanently clear all scan history?')) return;
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/history/clear', {
+            const res = await fetch(`${API_BASE}/api/history/clear`, {
                 method: 'POST'
             });
             if (!res.ok) throw new Error('Failed to clear history');
@@ -70,7 +71,7 @@
     {#if loading}
         <div class="loading-state">
             <div class="spinner"></div>
-            <p>Retrieving database logs...</p>
+            <p>Retrieving archived scans from local database...</p>
         </div>
     {:else if errorMsg}
         <div class="error-state">
@@ -79,9 +80,9 @@
         </div>
     {:else if history.length === 0}
         <div class="empty-state">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            <p>No scan logs found in database.</p>
-            <span>Run object recognitions to view history profiles.</span>
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="var(--primary)" stroke-width="1.5" style="filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3)); margin-bottom: 1.5rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <p>Your local scan history archive is currently empty.</p>
+            <span>Once you capture or upload specimens, their diagnostic history will be recorded here.</span>
         </div>
     {:else}
         <div class="history-list">

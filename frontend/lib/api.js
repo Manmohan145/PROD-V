@@ -5,3 +5,11 @@
  */
 
 export const API_BASE = 'http://127.0.0.1:8000';
+
+export function resolveApiAsset(path) {
+	if (!path) return '';
+	if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+		return path;
+	}
+	return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}

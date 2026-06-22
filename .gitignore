@@ -20,6 +20,7 @@ vite.config.ts.timestamp-*
 venv/
 .venv/
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -30,6 +31,7 @@ __pycache__/
 
 # ---- Runtime / Generated Data ----
 uploads/
+uploads/generated/
 logs/
 temp/
 tmp/
@@ -42,6 +44,7 @@ llm_cache.json
 # ---- Environment & Secrets ----
 .env
 .env.*
+backend/.env
 !.env.example
 !.env.test
 

@@ -3,9 +3,9 @@
     import { marked } from 'marked';
 
     // Component Props
-    let { 
-        text = '', 
-        speed: initialSpeed = 1.0 
+    let {
+        text = '',
+        speed: initialSpeed = 1.0
     } = $props();
 
     // Internal component states
@@ -13,7 +13,7 @@
     let isSpeaking = $state(false);
     let isPaused = $state(false);
     let currentWordIndex = $state(-1);
-    let speed = $state(initialSpeed);
+    let speed = $derived(initialSpeed);
 
     let htmlContentWithSpans = $state('');
     let cleanText = $state('');
@@ -31,7 +31,7 @@
             currentWordIndex = -1;
             return;
         }
-        
+
         // Compile markdown to standard HTML structure
         let rawHtml = '';
         try {
@@ -39,16 +39,16 @@
         } catch (e) {
             rawHtml = markdownText;
         }
-        
+
         if (typeof window === 'undefined') {
             htmlContentWithSpans = rawHtml;
             return;
         }
-        
+
         const parser = new DOMParser();
         const doc = parser.parseFromString(rawHtml, 'text/html');
         cleanText = doc.body.textContent.trim();
-        
+
         // Build the words array with precise character indices in cleanText
         words = [];
         const regex = /\S+/g;
@@ -60,13 +60,13 @@
                 end: match.index + match[0].length
             });
         }
-        
+
         // Split doc.body children into staggered sections for a visual reveal experience
         const sections = [];
         let currentSection = doc.createElement('div');
         currentSection.className = 'staggered-section';
         currentSection.style.setProperty('--delay', '0ms');
-        
+
         let secIdx = 0;
         Array.from(doc.body.childNodes).forEach(node => {
             if (node.nodeType === 1 && (node.tagName === 'H2' || node.tagName === 'H3' || node.tagName === 'H4')) {
@@ -83,19 +83,19 @@
         if (currentSection.childNodes.length > 0) {
             sections.push(currentSection);
         }
-        
+
         // Re-inject the staggered sections into the body
         doc.body.innerHTML = '';
         sections.forEach(sec => doc.body.appendChild(sec));
-        
+
         let wordIdx = 0;
-        
+
         function walk(node) {
             if (node.nodeType === 3) { // TEXT_NODE
                 const val = node.nodeValue;
                 const splitWords = val.split(/(\s+)/);
                 const parent = node.parentNode;
-                
+
                 splitWords.forEach(part => {
                     if (part.trim() === '') {
                         parent.insertBefore(document.createTextNode(part), node);
@@ -114,7 +114,7 @@
                 children.forEach(walk);
             }
         }
-        
+
         walk(doc.body);
         htmlContentWithSpans = doc.body.innerHTML;
     }
@@ -138,40 +138,40 @@
     function playSpeech() {
         if (!speechSynth || !cleanText) return;
         speechSynth.cancel();
-        
+
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        
+
         // Use browser default voice automatically to prevent multilingual failures
         utterance.voice = null;
-        
+
         // Set speech speed rate
         utterance.rate = speed;
-        
+
         utterance.onstart = () => {
             isSpeaking = true;
             isPaused = false;
         };
-        
+
         // Sync spoken index with boundary charIndexes
         utterance.onboundary = (event) => {
             if (event.name === 'word') {
                 const charIndex = event.charIndex;
                 const wordIndex = getWordIndexForCharIndex(charIndex);
-                
+
                 requestAnimationFrame(() => {
                     currentWordIndex = wordIndex;
                 });
             }
         };
-        
+
         utterance.onend = () => {
             cleanupSpeech();
         };
-        
+
         utterance.onerror = () => {
             cleanupSpeech();
         };
-        
+
         currentUtterance = utterance;
         isSpeaking = true;
         isPaused = false;
@@ -216,7 +216,13 @@
                 const idx = parseInt(el.getAttribute('data-word-idx') || '-1', 10);
                 if (idx === currentWordIndex) {
                     el.className = 'tts-word current-word';
-                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                    // Smooth auto-scroll only when active word goes near or out of view boundaries
+                    const containerRect = containerEl.getBoundingClientRect();
+                    const elRect = el.getBoundingClientRect();
+                    if (elRect.bottom > containerRect.bottom - 20 || elRect.top < containerRect.top + 20) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
                 } else if (idx < currentWordIndex) {
                     el.className = 'tts-word spoken-word';
                 } else {
@@ -245,9 +251,9 @@
         <!-- Audio Trigger Buttons -->
         <div class="audio-buttons">
             {#if !isSpeaking}
-                <button 
-                    class="ctrl-btn play-btn" 
-                    onclick={playSpeech} 
+                <button
+                    class="ctrl-btn play-btn"
+                    onclick={playSpeech}
                     aria-label="Start reading content aloud"
                     type="button"
                 >
@@ -257,9 +263,9 @@
             {:else}
                 <div class="active-ctrl-group">
                     {#if !isPaused}
-                        <button 
-                            class="ctrl-btn pause-btn" 
-                            onclick={pauseSpeech} 
+                        <button
+                            class="ctrl-btn pause-btn"
+                            onclick={pauseSpeech}
                             aria-label="Pause narration"
                             type="button"
                         >
@@ -267,9 +273,9 @@
                             <span>Pause</span>
                         </button>
                     {:else}
-                        <button 
-                            class="ctrl-btn resume-btn" 
-                            onclick={resumeSpeech} 
+                        <button
+                            class="ctrl-btn resume-btn"
+                            onclick={resumeSpeech}
                             aria-label="Resume narration"
                             type="button"
                         >
@@ -277,9 +283,9 @@
                             <span>Resume</span>
                         </button>
                     {/if}
-                    <button 
-                        class="ctrl-btn stop-btn" 
-                        onclick={stopSpeech} 
+                    <button
+                        class="ctrl-btn stop-btn"
+                        onclick={stopSpeech}
                         aria-label="Stop narration"
                         type="button"
                     >
@@ -298,12 +304,12 @@
                     <label for="speed-slider">Narration Speed</label>
                     <span class="speed-val">{speed.toFixed(2)}x</span>
                 </div>
-                <input 
+                <input
                     id="speed-slider"
-                    type="range" 
-                    min="0.5" 
-                    max="2.0" 
-                    step="0.1" 
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
                     bind:value={speed}
                     oninput={() => {
                         if (isSpeaking && !isPaused && currentUtterance) {
@@ -318,7 +324,7 @@
     </div>
 
     <!-- Dynamic Highlights Viewport -->
-    <div bind:this={containerEl} class="highlighter-viewport markdown-content">
+    <div bind:this={containerEl} class="highlighter-viewport markdown-content" class:narration-active={isSpeaking}>
         {@html htmlContentWithSpans}
     </div>
 </div>
@@ -499,19 +505,20 @@
         }
     }
 
-    /* TTS word highlights CSS properties - Apple books immersive reading theme */
+    /* TTS word highlights CSS properties - Immersive reading theme */
     :global(.tts-word) {
         display: inline-block;
-        transition: color 0.22s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), text-shadow 0.22s ease, opacity 0.22s ease;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         border-radius: 4px;
         padding: 0 2px;
         position: relative;
     }
 
     :global(.tts-word.current-word) {
-        color: #00f0ff !important; /* Bright cyan */
-        transform: scale(1.08) translateY(-1px);
-        text-shadow: 0 0 12px rgba(0, 240, 255, 0.8), 0 0 20px rgba(0, 240, 255, 0.4);
+        color: #ffffff !important; /* Glowing white text */
+        background: rgba(99, 102, 241, 0.5) !important; /* Glowing Indigo capsule */
+        transform: scale(1.06) translateY(-1px);
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.4);
         opacity: 1 !important;
         font-weight: 600;
         z-index: 2;
@@ -534,13 +541,24 @@
         100% { width: 100%; left: 0; }
     }
 
-    :global(.tts-word.spoken-word) {
-        color: #a7f3d0 !important; /* Emerald green tint */
-        opacity: 0.6;
+    /* Scoped to active narration */
+    :global(.highlighter-viewport.narration-active .tts-word.spoken-word) {
+        color: var(--text-primary) !important; /* fully readable */
+        opacity: 0.95;
+        background: rgba(6, 182, 212, 0.08); /* Soft Cyan highlight wash */
+        border-bottom: 1.5px dashed rgba(6, 182, 212, 0.3); /* Soft progress indicator dashed underline */
     }
 
-    :global(.tts-word.pending-word) {
+    :global(.highlighter-viewport.narration-active .tts-word.pending-word) {
+        color: var(--text-secondary);
+        opacity: 0.45; /* unread text is dimmed */
+    }
+
+    /* Standard view when narration is inactive (prevents dull/dimmed text) */
+    :global(.highlighter-viewport:not(.narration-active) .tts-word) {
         color: var(--text-primary);
-        opacity: 1;
+        opacity: 1.0;
+        background: transparent !important;
+        border-bottom: none !important;
     }
 </style>

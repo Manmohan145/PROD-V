@@ -2,10 +2,33 @@
     import ReadingHighlighter from './ReadingHighlighter.svelte';
 
     let { mcqs = [], targetObject = '' } = $props();
-    
+
     let selectedAnswers = $state({});
     let isSubmitted = $state(false);
     let score = $state(0);
+    let confettiElements = $state([]);
+
+    function triggerConfetti() {
+        const colors = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+        const tempConfetti = [];
+        for (let i = 0; i < 80; i++) {
+            tempConfetti.push({
+                id: i,
+                x: Math.random() * 100,
+                y: -10 - Math.random() * 20,
+                size: 6 + Math.random() * 8,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                delay: Math.random() * 1.2,
+                duration: 2 + Math.random() * 2,
+                angle: Math.random() * 360,
+                spinSpeed: 0.5 + Math.random() * 1.5
+            });
+        }
+        confettiElements = tempConfetti;
+        setTimeout(() => {
+            confettiElements = [];
+        }, 4500);
+    }
 
     let answeredCount = $derived(Object.keys(selectedAnswers).length);
 
@@ -33,17 +56,17 @@
     // Robust correct option matching logic supporting index, prefix (A.), or full-text values
     function checkOptionCorrect(mcq, option, optIdx) {
         const answerStr = mcq.answer.trim();
-        
+
         // Case 1: Answer is a single index letter (A, B, C, D)
         if (/^[A-D]$/i.test(answerStr)) {
             const correctLetterIdx = answerStr.toUpperCase().charCodeAt(0) - 65;
             return optIdx === correctLetterIdx;
         }
-        
+
         // Case 2: Answer is full text (with/without index prefixes)
         const cleanOption = option.replace(/^[A-D]\.\s*/i, '').trim().toLowerCase();
         const cleanAnswer = answerStr.replace(/^[A-D]\.\s*/i, '').trim().toLowerCase();
-        
+
         return cleanOption === cleanAnswer || option.trim().toLowerCase() === answerStr.toLowerCase();
     }
 
@@ -56,20 +79,28 @@
 
     function submitQuiz() {
         if (isSubmitted) return;
-        
+
         let tempScore = 0;
         mcqs.forEach((mcq, idx) => {
             let selected = selectedAnswers[idx];
             if (!selected) return;
-            
+
             const selectedIdx = mcq.options.indexOf(selected);
             if (selectedIdx !== -1 && checkOptionCorrect(mcq, selected, selectedIdx)) {
                 tempScore++;
             }
         });
-        
+
         score = tempScore;
         isSubmitted = true;
+
+        if (score === mcqs.length && mcqs.length > 0) {
+            if (typeof window !== 'undefined') {
+                const count = localStorage.getItem('visionai_perfect_quiz_count') || '0';
+                localStorage.setItem('visionai_perfect_quiz_count', (parseInt(count, 10) + 1).toString());
+            }
+            triggerConfetti();
+        }
     }
 
     function resetQuiz() {
@@ -93,19 +124,19 @@
                 <div class="progress-bar-fill" style="width: {(answeredCount / mcqs.length) * 100}%"></div>
             </div>
         </div>
-        
+
         {#each mcqs as mcq, idx}
             {@const userCorrect = isUserAnswerCorrect(mcq, selectedAnswers[idx])}
             <div class="question-card" class:correct-card={isSubmitted && userCorrect} class:incorrect-card={isSubmitted && !userCorrect}>
                 <div class="q-number">Specimen Question {idx + 1}</div>
                 <div class="q-text">{mcq.question}</div>
-                
+
                 <div class="options-grid">
                     {#each mcq.options as option, optIdx}
                         {@const isSelected = selectedAnswers[idx] === option}
                         {@const isOptionCorrect = checkOptionCorrect(mcq, option, optIdx)}
-                        
-                        <button 
+
+                        <button
                             class="option-btn"
                             class:selected={isSelected}
                             class:correct={isSubmitted && isOptionCorrect}
@@ -150,6 +181,27 @@
                         </div>
                         <button class="reset-btn" onclick={resetQuiz}>Re-Run Diagnostic</button>
                     </div>
+                </div>
+            {/if}
+
+            {#if confettiElements.length > 0}
+                <div class="confetti-container">
+                    {#each confettiElements as c (c.id)}
+                        <div
+                            class="confetti-piece"
+                            style="
+                                left: {c.x}%;
+                                top: {c.y}px;
+                                width: {c.size}px;
+                                height: {c.size}px;
+                                background-color: {c.color};
+                                animation-delay: {c.delay}s;
+                                animation-duration: {c.duration}s;
+                                transform: rotate({c.angle}deg);
+                                --spin-speed: {c.spinSpeed}s;
+                            "
+                        ></div>
+                    {/each}
                 </div>
             {/if}
         </div>
@@ -380,7 +432,7 @@
 
     .submit-btn:hover:not(:disabled) {
         transform: translateY(-2px);
-        box-shadow: 
+        box-shadow:
             0 12px 30px rgba(99, 102, 241, 0.3),
             var(--glow-cyan);
     }

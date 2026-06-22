@@ -3,11 +3,12 @@ import json
 import hashlib
 import time
 import socket
+from pathlib import Path
 from dotenv import load_dotenv
 import ollama
 from ollama import Client
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 class OllamaConnectionError(Exception):
     """Custom exception raised when Ollama service is not running or unreachable."""
@@ -19,18 +20,18 @@ class LocalLLMService:
         # Read from environment variables, fallback to defaults
         self.model_name = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         self.host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        
+
         # Parse Host IP/Port for a quick socket pre-check (avoids long http timeouts)
         self.host_ip, self.host_port = self._parse_host(self.host)
-        
+
         # Setup Ollama client with a timeout (default 45s to avoid UI freeze)
         self.timeout = 45.0
         self.client = Client(host=self.host, timeout=self.timeout)
-        
+
         # Local Persistent Cache File Setup
         self.cache_file = os.path.join(os.path.dirname(__file__), "..", "..", "llm_cache.json")
         self.cache = self._load_cache()
-        
+
         # Verify connection on startup
         self.is_configured = self.check_connection()
 
@@ -110,17 +111,17 @@ class LocalLLMService:
     def generate_object_knowledge(self, object_name: str) -> str:
         """
         Generates structured markdown educational details for an identified object.
-        
+
         Args:
             object_name (str): Label of the target object.
-            
+
         Returns:
             str: Markdown formatted fact sheet.
         """
         # Determine if this is a chat context instead of a simple object name
         is_chat = "User's new question:" in object_name or "Conversation history:" in object_name
         prefix = "chat" if is_chat else "info"
-        
+
         cache_key = self._get_cache_key(prefix, object_name)
         if cache_key in self.cache:
             return self.cache[cache_key]
@@ -139,7 +140,7 @@ class LocalLLMService:
             prompt = f"""You are an expert educational computer vision assistant.
 Provide highly detailed, comprehensive, and in-depth educational information about the object: "{object_name}". Make sure each section is thorough, descriptive, and intellectually stimulating, offering a complete learning profile.
 
-Please format your response using EXACTLY the following structure with the exact headers listed below. 
+Please format your response using EXACTLY the following structure with the exact headers listed below.
 Do not include conversational filler, greetings, or intro lines. Begin directly with the headers.
 
 ## Overview
@@ -171,7 +172,7 @@ A dedicated, comprehensive learning section. Explain in depth a relevant scienti
                 }
             )
             text_result = response["response"].strip()
-            
+
             # Clean up response chat headings if present
             if is_chat:
                 text_result = text_result.replace("## Overview\n", "").strip()
@@ -189,26 +190,26 @@ A dedicated, comprehensive learning section. Explain in depth a relevant scienti
     def generate_educational_data(self, object_name: str) -> dict:
         """
         Generates structured JSON data for interactive quizzes, flashcards, revision notes, and viva list.
-        
+
         Args:
             object_name (str): Label of the target object.
-            
+
         Returns:
             dict: Parsed study materials matching the required schema.
         """
         cache_key = self._get_cache_key("learn", object_name)
-        
+
         # Check cache
         if cache_key in self.cache:
             cached_data = self.cache[cache_key]
-            
+
             # Validate structure and heal malformed data
             cached_data, needs_update = self._validate_and_heal_educational_data(cached_data, object_name)
-            
+
             if needs_update:
                 self.cache[cache_key] = cached_data
                 self._save_cache()
-                
+
             return cached_data
 
         if not self.check_connection():
@@ -216,7 +217,7 @@ A dedicated, comprehensive learning section. Explain in depth a relevant scienti
                 "Ollama is offline. Please make sure the Ollama application is running."
             )
 
-        prompt = f"""You are an expert curriculum designer and teacher. 
+        prompt = f"""You are an expert curriculum designer and teacher.
 Generate a comprehensive, interactive learning guide for the object/animal: "{object_name}".
 
 You MUST return your entire response as a single valid JSON object. Do not write any conversational intro or outro text.
@@ -310,16 +311,16 @@ The JSON structure MUST follow this exact schema:
                     "top_p": 0.9,
                 }
             )
-            
+
             content = response["response"].strip()
-            
+
             # Clean markdown code fences if output returned them despite JSON format setting
             content = self._strip_code_fences(content)
             parsed_data = json.loads(content)
-            
+
             # Validate structure and heal malformed data
             parsed_data, _ = self._validate_and_heal_educational_data(parsed_data, object_name)
-            
+
             # Cache and save on success
             self.cache[cache_key] = parsed_data
             self._save_cache()
@@ -343,11 +344,11 @@ The JSON structure MUST follow this exact schema:
     def generate_comparison_data(self, object_a: str, object_b: str) -> str:
         """
         Compares two objects and outputs a detailed Markdown report.
-        
+
         Args:
             object_a (str): First object name.
             object_b (str): Second object name.
-            
+
         Returns:
             str: Markdown formatted comparison report.
         """
@@ -363,7 +364,7 @@ The JSON structure MUST follow this exact schema:
         prompt = f"""You are a scientific comparator and subject matter expert.
 Create a comprehensive educational comparison between the two objects: "{object_a}" and "{object_b}".
 
-Please format your response using EXACTLY the following structure with the exact headers. 
+Please format your response using EXACTLY the following structure with the exact headers.
 Do not write any introductory or conversational text. Begin directly with the headers.
 
 ## Comparison Table
@@ -398,10 +399,10 @@ A comprehensive educational essay (200-300 words) explaining why these two items
     def generate_document_analysis(self, text: str) -> str:
         """
         Generates document summaries, terms, and questions from text OCR results.
-        
+
         Args:
             text (str): Raw extracted document text.
-            
+
         Returns:
             str: Markdown structured study guide.
         """
@@ -417,7 +418,7 @@ A comprehensive educational essay (200-300 words) explaining why these two items
         prompt = f"""You are a document understanding and educational assistant.
 Analyze the following extracted text from a document and generate a structured educational study guide.
 
-Please format your response using EXACTLY the following structure with the exact headers. 
+Please format your response using EXACTLY the following structure with the exact headers.
 Do not write any introductory or conversational text. Begin directly with the headers.
 
 ## Summary
@@ -629,7 +630,7 @@ Format exactly as:
         """
         if not isinstance(data, dict):
             data = {}
-        
+
         healed = False
 
         # Validate full_explanation

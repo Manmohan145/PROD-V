@@ -35,6 +35,11 @@ if not exist "node_modules" (
 )
 
 echo.
+echo Stopping any previous backend on port 8000...
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    taskkill /PID %%p /F >nul 2>&1
+)
+
 echo Launching FastAPI backend server on http://localhost:8000...
 start "VisionAI-API" /b venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
@@ -48,7 +53,7 @@ echo Opening browser at http://localhost:5173...
 start http://localhost:5173
 
 echo.
-echo Application running! 
+echo Application running!
 echo Close this command prompt window to stop the servers.
 echo ==========================================
 

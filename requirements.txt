@@ -21,3 +21,4 @@ pytesseract>=0.3.10
 
 # Utilities
 python-dotenv>=1.0.0
+huggingface_hub>=1.0.0

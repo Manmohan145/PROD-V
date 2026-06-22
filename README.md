@@ -27,6 +27,10 @@ VisionAI Edge is a production-quality, modern full-stack application built for a
    - Persists all past scans with base64 thumbnail previews and inspection options.
 6. **Real-Time Webcam Scanner**:
    - Captures frames from webcam and runs full inference pipeline.
+7. **AI Image Studio**:
+   - Generates VisionAI-connected learning illustrations through the backend-only Hugging Face Inference API.
+   - Uses `black-forest-labs/FLUX.1-schnell` with local file storage and SQLite generation history.
+   - Supports templates, object-aware actions, downloads, regeneration, deletion, and history clearing.
 
 ---
 
@@ -35,11 +39,12 @@ VisionAI Edge is a production-quality, modern full-stack application built for a
 ```text
 VisionAI/
 ├── backend/
-│   ├── main.py                    # FastAPI app entry point + CORS config
+│   ├── main.py                    # FastAPI app entry point + CORS/static config
 │   ├── routes/
 │   │   └── api_routes.py          # All REST API endpoints
 │   ├── services/
 │   │   ├── detector.py            # MobileNetV2 & YOLOv8 ONNX inference (OpenCV DNN)
+│   │   ├── flux_image_service.py  # Backend-only Hugging Face FLUX integration
 │   │   ├── local_llm_service.py   # Local Ollama Client SDK + persistent JSON cache
 │   │   └── ocr_service.py         # PyTesseract OCR document extraction service
 │   ├── database/
@@ -70,7 +75,7 @@ VisionAI/
 │   └── synset.txt                 # ImageNet 1,000-class label file
 ├── static/
 │   └── robots.txt                 # Web crawler directives
-├── .env.example                   # Environment variable template (copy to .env)
+├── .env.example                   # Environment template (copy to backend/.env)
 ├── .gitignore                     # Production-grade git exclusion rules
 ├── requirements.txt               # Python dependencies
 ├── package.json                   # Node.js dependencies (SvelteKit + Vite)
@@ -116,10 +121,14 @@ npm run dev
 ```
 
 ### Environment Configuration
-Copy `.env.example` to `.env` and customize if needed:
+Copy `.env.example` to `backend/.env` and add a Hugging Face token with Inference Providers permission:
 ```bash
-copy .env.example .env
+copy .env.example backend\.env
 ```
+
+Accept the access conditions on the `black-forest-labs/FLUX.1-schnell`
+Hugging Face model page before using AI Image Studio. The token is read only by
+FastAPI and is never sent to SvelteKit.
 
 ---
 
@@ -137,6 +146,10 @@ copy .env.example .env
 | `GET` | `/api/history` | Retrieve all scan history records |
 | `DELETE` | `/api/history/{id}` | Delete a specific history record |
 | `POST` | `/api/history/clear` | Clear all history records and uploaded images |
+| `POST` | `/api/image/generate` | Generate and locally store a FLUX image |
+| `GET` | `/api/image/history` | Retrieve generated-image history |
+| `DELETE` | `/api/image/history/{id}` | Delete a generated image and its record |
+| `POST` | `/api/image/history/clear` | Clear generated-image history and files |
 
 ---
 
@@ -149,5 +162,6 @@ copy .env.example .env
 | Vision AI | OpenCV DNN, MobileNetV2 ONNX, YOLOv8 ONNX |
 | Language AI | Ollama (local LLaMA 3.2 3B) |
 | OCR | PyTesseract + Tesseract Engine |
+| Image Generation | Hugging Face Inference API + FLUX.1-schnell |
 | Database | SQLite3 (via Python stdlib) |
 | Styling | Vanilla CSS (glassmorphism design system) |
