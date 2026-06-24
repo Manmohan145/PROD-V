@@ -8,10 +8,31 @@ echo ==========================================
 :: Change directory to the script's directory to ensure relative paths work
 cd /d "%~dp0"
 
-:: Check if virtual environment directory exists
-if not exist "venv\Scripts\activate.bat" (
-    echo [INFO] Virtual environment 'venv' not found. Creating virtual environment...
-    python -m venv venv
+:: Check if virtual environment exists AND its Python actually runs on this machine.
+:: A venv folder copied in from another PC/user account has hardcoded interpreter
+:: paths and will silently fail to launch, so detect that and rebuild it.
+set "NEED_VENV=0"
+if not exist "venv\Scripts\python.exe" (
+    set "NEED_VENV=1"
+) else (
+    venv\Scripts\python.exe -c "" >nul 2>&1
+    if !errorlevel! neq 0 set "NEED_VENV=1"
+)
+
+if "!NEED_VENV!"=="1" (
+    if exist "venv" (
+        echo [INFO] Existing 'venv' is broken or from another machine. Rebuilding it...
+        rmdir /s /q venv
+    ) else (
+        echo [INFO] Virtual environment 'venv' not found. Creating virtual environment...
+    )
+
+    where py >nul 2>&1
+    if !errorlevel! equ 0 (
+        py -3 -m venv venv
+    ) else (
+        python -m venv venv
+    )
     if !errorlevel! neq 0 (
         echo [ERROR] Failed to create virtual environment. Please check if Python is installed and added to PATH.
         pause

@@ -3,16 +3,20 @@ import numpy as np
 import os
 import urllib.request
 
+from backend.config import settings
+
 class ObjectDetector:
-    def __init__(self, assets_dir: str = "assets", mode: str = "classification"):
+    def __init__(self, assets_dir: str | None = None, mode: str = "classification"):
         """
         Initializes the ObjectDetector with mode and asset directories.
-        
+
         Args:
-            assets_dir (str): Directory where model assets are saved.
+            assets_dir (str | None): Directory where model assets are saved.
+                Defaults to <project_root>/assets so models are found regardless
+                of the working directory the server was launched from.
             mode (str): Mode of execution - either "classification" (MobileNetV2) or "detection" (YOLOv8).
         """
-        self.assets_dir = assets_dir
+        self.assets_dir = assets_dir or str(settings.project_root / "assets")
         self.mode = mode
         
         # Classification assets (MobileNetV2)

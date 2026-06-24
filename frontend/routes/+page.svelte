@@ -4,11 +4,28 @@
     import QuizComponent from '$components/QuizComponent.svelte';
     import HistoryPanel from '$components/HistoryPanel.svelte';
     import ReadingHighlighter from '$components/ReadingHighlighter.svelte';
+    import Icon from '$components/Icon.svelte';
     import { API_BASE, resolveApiAsset } from '$lib/api.js';
 
+    const TABS = [
+        { label: 'Image Scanner', icon: 'camera' },
+        { label: 'Real-Time Scan', icon: 'video' },
+        { label: 'Specimen Explorer', icon: 'search' },
+        { label: 'Study Workspace', icon: 'graduation-cap' },
+        { label: 'Document Digest', icon: 'book-open' },
+        { label: 'AI Image Studio', icon: 'palette' },
+        { label: 'Archive Logs', icon: 'archive' },
+        { label: 'Specimen Comparator', icon: 'scale' },
+        { label: 'Operator Manual', icon: 'info' }
+    ];
+
+    function tabIcon(label) {
+        return TABS.find((t) => t.label === label)?.icon ?? 'info';
+    }
+
     // Global App States
-    let activeTab = $state('📸 Image Scanner');
-    let visionEngine = $state('classification'); // 'classification' or 'detection'
+    let activeTab = $state('Image Scanner');
+    const visionEngine = 'classification'; // Image Scanner always classifies; Real-Time Scan always uses YOLOv8 detection
     let confidenceThreshold = $state(0.25);
     let enableDemoMode = $state(false);
     let systemStatus = $state({ ollama_active: false, ollama_model: 'offline' });
@@ -294,14 +311,14 @@ This specimen represents an everyday concept or organism. Key details are proces
     function updateBadges() {
         if (typeof window === 'undefined') return;
         const badges = [];
-        if (studyStreak >= 1) badges.push({ id: 'streak_1', title: '🔥 Daily Explorer', desc: 'Maintained a 1-day study streak' });
-        if (studyStreak >= 3) badges.push({ id: 'streak_3', title: '⚡ Consistency Champion', desc: 'Maintained a 3-day study streak' });
-        if (totalSpecimensCount >= 1) badges.push({ id: 'scan_1', title: '📸 First Contact', desc: 'Logged your first specimen scan' });
-        if (totalSpecimensCount >= 5) badges.push({ id: 'scan_5', title: '🏛️ Specimen Curator', desc: 'Logged 5 specimens in the archive' });
+        if (studyStreak >= 1) badges.push({ id: 'streak_1', icon: 'flame', title: 'Daily Explorer', desc: 'Maintained a 1-day study streak' });
+        if (studyStreak >= 3) badges.push({ id: 'streak_3', icon: 'zap', title: 'Consistency Champion', desc: 'Maintained a 3-day study streak' });
+        if (totalSpecimensCount >= 1) badges.push({ id: 'scan_1', icon: 'camera', title: 'First Contact', desc: 'Logged your first specimen scan' });
+        if (totalSpecimensCount >= 5) badges.push({ id: 'scan_5', icon: 'landmark', title: 'Specimen Curator', desc: 'Logged 5 specimens in the archive' });
 
         const perfectQuizCount = localStorage.getItem('visionai_perfect_quiz_count');
         if (perfectQuizCount && parseInt(perfectQuizCount, 10) >= 1) {
-            badges.push({ id: 'quiz_perfect', title: '🏆 Science Scholar', desc: 'Scored 100% on a diagnostic quiz' });
+            badges.push({ id: 'quiz_perfect', icon: 'award', title: 'Science Scholar', desc: 'Scored 100% on a diagnostic quiz' });
         }
         earnedBadges = badges;
     }
@@ -323,6 +340,14 @@ This specimen represents an everyday concept or organism. Key details are proces
     let videoElement = $state();
     let webcamStream = $state();
     let isWebcamActive = $state(false);
+
+    // Real-Time Scan dedicated state (independent from Image Scanner tab)
+    let realtimeScanResult = $state(null);
+    let realtimeScanLoading = $state(false);
+    let realtimeScanError = $state('');
+    let realtimeVisibleConfidence = $state({});
+    let autoScanActive = $state(false);
+    let autoScanInterval = null;
 
 
 
@@ -681,7 +706,7 @@ This specimen represents an everyday concept or organism. Key details are proces
 
             chatHistory = [...chatHistory, { role: 'assistant', content: data.reply }];
         } catch (err) {
-            chatHistory = [...chatHistory, { role: 'assistant', content: `⚠️ Error: ${err.message}` }];
+            chatHistory = [...chatHistory, { role: 'assistant', content: `Error: ${err.message}` }];
         } finally {
             chatLoading = false;
         }
@@ -870,28 +895,90 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             webcamStream = null;
         }
         isWebcamActive = false;
+        // Stop auto-scan when webcam stops
+        stopAutoScan();
+    }
+
+    function startAutoScan() {
+        if (autoScanActive || !isWebcamActive) return;
+        autoScanActive = true;
+        autoScanInterval = setInterval(() => {
+            if (!realtimeScanLoading && isWebcamActive) {
+                captureSnapshot();
+            }
+        }, 2500);
+    }
+
+    function stopAutoScan() {
+        autoScanActive = false;
+        if (autoScanInterval) {
+            clearInterval(autoScanInterval);
+            autoScanInterval = null;
+        }
     }
 
     function captureSnapshot() {
-        if (!videoElement) return;
+        if (!videoElement || realtimeScanLoading) return;
         const canvas = document.createElement('canvas');
         canvas.width = videoElement.videoWidth || 640;
         canvas.height = videoElement.videoHeight || 480;
         const ctx = canvas.getContext('2d');
-
-        // Flip canvas if we want normal preview mirroring (typically webcam is mirrored)
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-        canvas.toBlob(blob => {
+        canvas.toBlob(async blob => {
             const file = new File([blob], 'snapshot.png', { type: 'image/png' });
-            handleImageUpload(file);
-            stopWebcam();
+
+            // Clear previous result
+            realtimeScanResult = null;
+            realtimeScanError = '';
+            realtimeVisibleConfidence = {};
+            realtimeScanLoading = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            // Always use the dedicated YOLO real-time endpoint (not the general analyze endpoint)
+            formData.append('confidence_threshold', Math.min(confidenceThreshold, 0.30).toString());
+
+            try {
+                const res = await fetch(`${API_BASE}/api/realtime-scan`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.detail || 'Inference call failed');
+                }
+                const result = await res.json();
+                realtimeScanResult = result;
+
+                // Initialize confidence bars at 0 then animate
+                if (result.detections) {
+                    result.detections.forEach(det => { realtimeVisibleConfidence[det.label] = 0; });
+                    setTimeout(() => {
+                        result.detections.forEach(det => {
+                            realtimeVisibleConfidence[det.label] = det.confidence;
+                        });
+                    }, 150);
+                }
+
+                // Update global counters
+                loadSpecimenCount();
+                dailyDiscoveryCount++;
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('visionai_daily_discovery_count', dailyDiscoveryCount.toString());
+                }
+                updateBadges();
+            } catch (err) {
+                realtimeScanError = err.message || 'Scan failed';
+            } finally {
+                realtimeScanLoading = false;
+            }
         }, 'image/png');
     }
 
     // Inspect callback triggered from History Panel
     async function handleHistoryInspect(objectName, confidence) {
-        activeTab = '📸 Image Scanner';
+        activeTab = 'Image Scanner';
         selectedExploreLabel = objectName;
         exploreLoading = true;
         exploreResult = null;
@@ -938,7 +1025,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     async function startWorkspaceSession(target, subTab = 'quiz') {
-        activeTab = '🎓 Study Workspace';
+        activeTab = 'Study Workspace';
         learningTarget = target;
         await loadLearningCurriculum();
         if (learningData) {
@@ -948,7 +1035,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     function startComparisonSession(target) {
         compareA = target;
-        activeTab = '⚖️ Specimen Comparator';
+        activeTab = 'Specimen Comparator';
         if (compareB) {
             executeComparison();
         }
@@ -999,11 +1086,11 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         } catch (err) {
             let msg = err.message || 'Error generating image';
             if (msg.includes('backend/.env') || msg.includes('not configured')) {
-                msg = '🔑 Add your Hugging Face token to backend/.env, then restart the backend.';
+                msg = 'Add your Hugging Face token to backend/.env, then restart the backend.';
             } else if (msg.includes('access was denied') || msg.includes('403')) {
-                msg = '🔑 Accept the FLUX.1-schnell model terms and grant your Hugging Face token Inference Providers permission.';
+                msg = 'Accept the FLUX.1-schnell model terms and grant your Hugging Face token Inference Providers permission.';
             } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ECONNREFUSED')) {
-                msg = '🔌 Cannot reach backend. Make sure the FastAPI server is running on port 8000 (run run.bat).';
+                msg = 'Cannot reach backend. Make sure the FastAPI server is running on port 8000 (run run.bat).';
             }
             imageGenerationError = msg;
         } finally {
@@ -1013,7 +1100,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
     function triggerImageGeneration(promptText) {
         imagePrompt = promptText;
-        activeTab = '🎨 AI Image Studio';
+        activeTab = 'AI Image Studio';
         executeImageGeneration();
     }
 
@@ -1022,21 +1109,21 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         if (normalized.includes('tiger')) {
             return {
                 title: 'Generate Learning Illustration',
-                icon: '🐅',
+                icon: 'image',
                 prompt: 'Create an educational wildlife illustration of a Bengal Tiger showing habitat, anatomy, conservation status, and scientific labels.'
             };
         }
         if (normalized.includes('laptop')) {
             return {
                 title: 'Generate Future Version',
-                icon: '🚀',
+                icon: 'rocket',
                 prompt: 'Create a futuristic AI-powered laptop from the year 2050 with advanced holographic interfaces and modern industrial design.'
             };
         }
         if (normalized.includes('plant')) {
             return {
                 title: 'Generate Scientific Diagram',
-                icon: '🌿',
+                icon: 'leaf',
                 prompt: 'Create a detailed scientific botanical diagram with labels and educational annotations.'
             };
         }
@@ -1117,38 +1204,31 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     <!-- Sidebar Panel -->
     <aside class="sidebar">
         <div class="sidebar-brand">
-            <span class="logo-eye">👁️</span>
+            <span class="logo-eye"><Icon name="eye" size={26} /></span>
             <h2>VisionAI</h2>
         </div>
         <p class="sidebar-tagline">AI Research & Learning Platform</p>
 
         <!-- Navigation Menu -->
         <nav class="sidebar-nav">
-            {#each ['📸 Image Scanner', '📹 Real-Time Scan', '🔍 Specimen Explorer', '🎓 Study Workspace', '📖 Document Digest', '🎨 AI Image Studio', '⏳ Archive Logs', '⚖️ Specimen Comparator', 'ℹ️ Operator Manual'] as tab}
+            {#each TABS as tab}
                 <button
                     class="nav-item"
-                    class:active={activeTab === tab}
+                    class:active={activeTab === tab.label}
                     onclick={() => {
-                        activeTab = tab;
-                        if (tab !== '📹 Real-Time Scan') stopWebcam();
+                        activeTab = tab.label;
+                        if (tab.label !== 'Real-Time Scan') stopWebcam();
                     }}
                 >
-                    {tab}
+                    <Icon name={tab.icon} size={17} class="nav-item-icon" />
+                    <span>{tab.label}</span>
                 </button>
             {/each}
         </nav>
 
         <!-- Settings Box -->
         <div class="sidebar-section settings-box">
-            <h3>⚙️ Settings</h3>
-
-            <div class="setting-row">
-                <label for="vision-engine">Vision Engine</label>
-                <select id="vision-engine" bind:value={visionEngine}>
-                    <option value="classification">Classification (MobileNet)</option>
-                    <option value="detection">Detection (YOLOv8)</option>
-                </select>
-            </div>
+            <h3><Icon name="settings" size={16} /> Settings</h3>
 
             <div class="setting-row">
                 <div class="slider-header">
@@ -1166,7 +1246,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             </div>
 
             <div class="setting-row toggle-row">
-                <label for="demo-mode">🎓 Professor Demo Mode</label>
+                <label for="demo-mode"><Icon name="graduation-cap" size={15} /> Professor Demo Mode</label>
                 <input
                     id="demo-mode"
                     type="checkbox"
@@ -1175,7 +1255,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             </div>
 
             <div class="setting-row toggle-row">
-                <label for="presentation-mode">📺 Presentation Mode</label>
+                <label for="presentation-mode"><Icon name="monitor" size={15} /> Presentation Mode</label>
                 <input
                     id="presentation-mode"
                     type="checkbox"
@@ -1187,11 +1267,11 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         <!-- Badges Section -->
         {#if earnedBadges.length > 0}
             <div class="sidebar-section badges-box">
-                <h3>🏆 Achievements</h3>
+                <h3><Icon name="award" size={16} /> Achievements</h3>
                 <div class="badges-list">
                     {#each earnedBadges as badge}
                         <div class="badge-item" title={badge.desc}>
-                            <span class="badge-icon">⭐</span>
+                            <span class="badge-icon"><Icon name={badge.icon} size={14} /></span>
                             <span class="badge-title">{badge.title}</span>
                         </div>
                     {/each}
@@ -1202,15 +1282,23 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         <!-- Connection Indicator -->
         <div class="sidebar-section status-indicator">
             {#if statusChecking}
-                <span class="indicator checking">🟡 Checking Connection...</span>
+                <span class="indicator checking"><span class="status-dot status-dot-yellow"></span> Checking Connection...</span>
             {:else if systemStatus.ollama_active}
-                <span class="indicator active">🟢 Ollama Active ({systemStatus.ollama_model})</span>
+                <span class="indicator active"><span class="status-dot status-dot-green"></span> Ollama Active ({systemStatus.ollama_model})</span>
             {:else if enableDemoMode}
-                <span class="indicator active" style="color: var(--secondary);">🟢 Offline Simulator Active</span>
+                <span class="indicator active" style="color: var(--secondary);"><span class="status-dot status-dot-green"></span> Offline Simulator Active</span>
             {:else}
                 <div class="offline-box">
-                    <span class="indicator offline">🔴 Ollama Offline</span>
+                    <span class="indicator offline"><span class="status-dot status-dot-red"></span> Ollama Offline</span>
                     <p class="offline-help">Start Ollama locally and run <code>ollama run llama3.2:3b</code> to unlock interactive facts, quizzes, and OCR guides.</p>
+                    <button
+                        class="offline-retry-btn"
+                        onclick={checkServerStatus}
+                        disabled={statusChecking}
+                    >
+                        <Icon name="refresh-cw" size={13} spin={statusChecking} />
+                        {statusChecking ? 'Checking...' : 'Retry Connection'}
+                    </button>
                 </div>
             {/if}
         </div>
@@ -1221,21 +1309,21 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         <header class="app-header">
             <div class="header-hud">
                 <div class="hud-main">
-                    <h1>{activeTab}</h1>
+                    <h1>{#key activeTab}<Icon name={tabIcon(activeTab)} size={28} class="header-icon" />{/key} {activeTab}</h1>
                     <p class="operator-greeting">{operatorGreeting}</p>
                 </div>
                 <div class="hud-stats">
                     <div class="hud-stat-badge emerald-glow">
                         <span class="lbl">STREAK</span>
-                        <span class="val">🔥 {studyStreak} Days</span>
+                        <span class="val"><Icon name="flame" size={15} /> {studyStreak} Days</span>
                     </div>
                     <div class="hud-stat-badge accent-glow">
                         <span class="lbl">TODAY</span>
-                        <span class="val">👁️ {dailyDiscoveryCount} Scans</span>
+                        <span class="val"><Icon name="eye" size={15} /> {dailyDiscoveryCount} Scans</span>
                     </div>
                     <div class="hud-stat-badge primary-glow">
                         <span class="lbl">ARCHIVE</span>
-                        <span class="val">👁️ {totalSpecimensCount} Logged</span>
+                        <span class="val"><Icon name="eye" size={15} /> {totalSpecimensCount} Logged</span>
                     </div>
                 </div>
             </div>
@@ -1263,7 +1351,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                 </div>
                 <div class="metric-card yellow-glow">
                     <span class="lbl">Active Vision Engine</span>
-                    <span class="num">{visionEngine === 'classification' ? 'MobileNetV2' : 'YOLOv8'}</span>
+                    <span class="num">MobileNetV2</span>
                 </div>
             </section>
         {/if}
@@ -1271,7 +1359,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         <div class="tab-content-wrapper">
 
             <!-- TAB 1: IMAGE SCANNER -->
-            {#if activeTab === '📸 Image Scanner'}
+            {#if activeTab === 'Image Scanner'}
                 <div class="panel-layout">
                     <!-- Left Side: Upload & View -->
                     <div class="column-left">
@@ -1298,7 +1386,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                                 style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; cursor: pointer; color: white; background: linear-gradient(135deg, var(--primary), var(--secondary)); box-shadow: var(--glow-surface);"
                                                 onclick={runDemoSimulation}
                                             >
-                                                <span>✨ Run Simulated Tiger Scan</span>
+                                                <span><Icon name="sparkles" size={15} /> Run Simulated Tiger Scan</span>
                                             </button>
                                         </div>
                                     {/if}
@@ -1319,7 +1407,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             </div>
 
                             {#if analysisError}
-                                <div class="error-banner">{analysisError}</div>
+                                <div class="error-banner"><Icon name="alert-triangle" size={14} /> {analysisError}</div>
                             {/if}
 
                             {#if analysisResult}
@@ -1348,7 +1436,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                                             onclick={() => generateForDetectedObject(det.label)}
                                                             title={generationAction.title}
                                                         >
-                                                            {generationAction.icon} {generationAction.title}
+                                                            <Icon name={generationAction.icon} size={13} /> {generationAction.title}
                                                         </button>
                                                     {/if}
                                                 </div>
@@ -1368,24 +1456,24 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                         <div class="glass-card facts-card">
                             {#if selectedExploreLabel}
                                 <div class="facts-header">
-                                    <h3>🎓 Knowledge Engine: {selectedExploreLabel}</h3>
+                                    <h3><Icon name="graduation-cap" size={20} /> Knowledge Engine: {selectedExploreLabel}</h3>
                                     {#if scanStep === 1}
-                                        <span class="status-pill status-success">✓ Scan Complete — {analysisResult.detections.length} {analysisResult.detections.length === 1 ? 'object' : 'objects'} identified</span>
+                                        <span class="status-pill status-success"><Icon name="check" size={12} /> Scan Complete — {analysisResult.detections.length} {analysisResult.detections.length === 1 ? 'object' : 'objects'} identified</span>
                                     {:else if scanStep === 2}
-                                        <span class="status-pill status-info">⚡ Calibrating diagnostic model...</span>
+                                        <span class="status-pill status-info"><Icon name="zap" size={12} /> Calibrating diagnostic model...</span>
                                     {:else if scanStep === 3}
-                                        <span class="status-pill status-loading">🧠 Consulting neural networks...</span>
+                                        <span class="status-pill status-loading"><Icon name="cpu" size={12} /> Consulting neural networks...</span>
                                     {:else if scanStep === 4}
-                                        <span class="status-pill status-compiling">📚 Synthesizing educational insights...</span>
+                                        <span class="status-pill status-compiling"><Icon name="book" size={12} /> Synthesizing educational insights...</span>
                                     {:else if scanStep === 5}
-                                        <span class="status-pill status-ready">🟢 LEARNING MODULE READY</span>
+                                        <span class="status-pill status-ready"><span class="status-dot status-dot-green"></span> LEARNING MODULE READY</span>
                                     {/if}
                                 </div>
 
                                 {#if scanStep === 1 || scanStep === 2}
                                     <div class="discovery-step-view">
                                         <div class="discovery-pulse-container">
-                                            <div class="pulse-icon">🔍</div>
+                                            <div class="pulse-icon"><Icon name="search" size={22} /></div>
                                             <div class="pulse-waves"></div>
                                         </div>
                                         <p class="discovery-text">Specimen matched successfully. Aligning neural confidence scores...</p>
@@ -1403,24 +1491,24 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                         <!-- Educational Enrichment Panel -->
                                         <div class="educational-enrichment-card slide-up-reveal">
                                             <div class="enrichment-header">
-                                                <h4>🎓 Specimen Educational Catalog: {selectedExploreLabel}</h4>
+                                                <h4><Icon name="graduation-cap" size={17} /> Specimen Educational Catalog: {selectedExploreLabel}</h4>
                                                 <span class="level-indicator">{currentProfile.level}</span>
                                             </div>
                                             <div class="enrichment-grid">
                                                 <div class="enrich-item glow-surface">
-                                                    <span class="enrich-title">💡 Fun Fact</span>
+                                                    <span class="enrich-title"><Icon name="lightbulb" size={14} /> Fun Fact</span>
                                                     <p class="enrich-text">{currentProfile.funFact}</p>
                                                 </div>
                                                 <div class="enrich-item glow-primary">
-                                                    <span class="enrich-title">❓ Did You Know?</span>
+                                                    <span class="enrich-title"><Icon name="help-circle" size={14} /> Did You Know?</span>
                                                     <p class="enrich-text">{currentProfile.didYouKnow}</p>
                                                 </div>
                                                 <div class="enrich-item glow-accent">
-                                                    <span class="enrich-title">🚀 Real-World Applications</span>
+                                                    <span class="enrich-title"><Icon name="rocket" size={14} /> Real-World Applications</span>
                                                     <p class="enrich-text">{currentProfile.applications}</p>
                                                 </div>
                                                 <div class="enrich-item glow-emerald">
-                                                    <span class="enrich-title">🌟 Importance</span>
+                                                    <span class="enrich-title"><Icon name="star" size={14} /> Importance</span>
                                                     <p class="enrich-text">{currentProfile.importance}</p>
                                                 </div>
                                             </div>
@@ -1428,23 +1516,24 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
                                         <!-- Interactive Study Integration -->
                                         <div class="hud-study-actions slide-up-reveal" style="animation-delay: 100ms;">
-                                            <h4>⚡ Specimen Action Suite</h4>
+                                            <h4><Icon name="zap" size={16} /> Specimen Action Suite</h4>
                                             <div class="study-actions-grid">
                                                 <button class="action-btn study-btn active-pulse" onclick={() => startWorkspaceSession(selectedExploreLabel, 'quiz')}>
-                                                    🎓 Run MCQ Quiz
+                                                    <Icon name="graduation-cap" size={14} /> Run MCQ Quiz
                                                 </button>
                                                 <button class="action-btn study-btn" onclick={() => startWorkspaceSession(selectedExploreLabel, 'flash')}>
-                                                    🎴 Study Flashcards
+                                                    <Icon name="layers" size={14} /> Study Flashcards
                                                 </button>
                                                 <button class="action-btn study-btn" onclick={() => startWorkspaceSession(selectedExploreLabel, 'explain')}>
-                                                    📖 Full Details
+                                                    <Icon name="book-open" size={14} /> Full Details
                                                 </button>
                                                 <button class="action-btn compare-btn" onclick={() => startComparisonSession(selectedExploreLabel)}>
-                                                    ⚖️ Compare Target
+                                                    <Icon name="scale" size={14} /> Compare Target
                                                 </button>
                                                 {#if getObjectGenerationAction(selectedExploreLabel)}
+                                                    {@const genAction = getObjectGenerationAction(selectedExploreLabel)}
                                                     <button class="action-btn compare-btn" style="grid-column: span 2;" onclick={() => generateForDetectedObject(selectedExploreLabel)}>
-                                                        {getObjectGenerationAction(selectedExploreLabel).icon} {getObjectGenerationAction(selectedExploreLabel).title}
+                                                        <Icon name={genAction.icon} size={14} /> {genAction.title}
                                                     </button>
                                                 {/if}
                                             </div>
@@ -1452,7 +1541,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
                                         <!-- Chat Widget -->
                                         <div class="chat-widget slide-up-reveal" style="animation-delay: 200ms;">
-                                            <h4>💬 Ask About This Object</h4>
+                                            <h4><Icon name="message-circle" size={16} /> Ask About This Object</h4>
                                             <div class="chat-viewport">
                                                 {#each chatHistory as msg}
                                                     <div class="chat-bubble {msg.role}">
@@ -1491,7 +1580,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             {/if}
 
             <!-- TAB 2: REAL-TIME SCAN -->
-            {#if activeTab === '📹 Real-Time Scan'}
+            {#if activeTab === 'Real-Time Scan'}
                 <div class="glass-card live-capture-card">
                     <div class="video-preview-wrapper">
                         {#if !isWebcamActive}
@@ -1501,19 +1590,108 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             </div>
                         {/if}
                         <video bind:this={videoElement} class:active={isWebcamActive} autoplay playsinline><track kind="captions" /></video>
+
+                        <!-- Annotated frame fades in over the live feed instead of opening a second box -->
+                        {#if realtimeScanResult?.annotated_image}
+                            {#key realtimeScanResult.annotated_image}
+                                <img src={realtimeScanResult.annotated_image} alt="Annotated scan frame" class="rt-annotated-overlay" />
+                            {/key}
+                        {/if}
+
+                        {#if realtimeScanLoading}
+                            <div class="rt-scan-overlay">
+                                <div class="rt-scanner-laser"></div>
+                                <span class="rt-scan-status"><Icon name="zap" size={13} /> Analyzing frame...</span>
+                            </div>
+                        {/if}
+
+                        {#if realtimeScanResult && !realtimeScanLoading}
+                            <div class="rt-overlay-hud">
+                                <span class="status-pill status-success">
+                                    <Icon name="check" size={12} /> {realtimeScanResult.detections.length} {realtimeScanResult.detections.length === 1 ? 'object' : 'objects'} detected
+                                </span>
+                                <span class="rt-latency-badge"><Icon name="zap" size={12} /> {realtimeScanResult.latency_ms?.toFixed(1)}ms</span>
+                            </div>
+                        {/if}
                     </div>
 
                     {#if isWebcamActive}
                         <div class="camera-actions">
-                            <button class="snap-btn" onclick={captureSnapshot}>📸 Scan Frame</button>
-                            <button class="stop-camera-btn" onclick={stopWebcam}>Stop Scan</button>
+                            <div class="rt-engine-badge"><Icon name="target" size={13} /> YOLOv8 Detection</div>
+                            <button class="snap-btn" class:active-pulse={!realtimeScanLoading} onclick={captureSnapshot} disabled={realtimeScanLoading}>
+                                {#if realtimeScanLoading}
+                                    <Icon name="loader" size={15} spin /> Scanning...
+                                {:else}
+                                    <Icon name="camera" size={15} /> Scan Frame
+                                {/if}
+                            </button>
+                            <button
+                                class="auto-scan-btn"
+                                class:auto-scan-on={autoScanActive}
+                                onclick={() => autoScanActive ? stopAutoScan() : startAutoScan()}
+                                disabled={realtimeScanLoading && !autoScanActive}
+                            >
+                                {#if autoScanActive}
+                                    <Icon name="stop-circle" size={14} /> Stop Auto-Scan
+                                {:else}
+                                    <Icon name="repeat" size={14} /> Auto-Scan
+                                {/if}
+                            </button>
+                            <button class="stop-camera-btn" onclick={stopWebcam}>Stop Camera</button>
+                        </div>
+                    {/if}
+
+                    {#if realtimeScanError}
+                        <div class="error-banner"><Icon name="alert-triangle" size={14} /> {realtimeScanError}</div>
+                    {/if}
+
+                    <!-- Detection strip: lives in the same card, no separate floating panel -->
+                    {#if realtimeScanResult}
+                        <div class="rt-results-panel slide-up-reveal">
+                            {#if realtimeScanResult.detections.length === 0}
+                                <div class="rt-no-detections">
+                                    <span><Icon name="search" size={22} /></span>
+                                    <p>No objects detected. Try better lighting or a clearer frame.</p>
+                                </div>
+                            {:else}
+                                <div class="rt-detections-row">
+                                    {#each realtimeScanResult.detections as det}
+                                        <div class="rt-det-chip">
+                                            <div class="rt-det-meta">
+                                                <span class="rt-det-label">{det.label}</span>
+                                                <span class="rt-det-conf">{(det.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                            <div class="progress-bar-track">
+                                                <div
+                                                    class="progress-bar-fill"
+                                                    style="width: {(realtimeVisibleConfidence[det.label] || 0) * 100}%; transition: width 0.8s cubic-bezier(0.4,0,0.2,1);"
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    {/each}
+                                </div>
+
+                                {#if realtimeScanResult.top_label}
+                                    <div class="rt-quick-actions">
+                                        <button class="rt-action-btn" onclick={() => { activeTab = 'Specimen Explorer'; searchQuery = realtimeScanResult.top_label; executeSearch(); }}>
+                                            <Icon name="search" size={13} /> Explore
+                                        </button>
+                                        <button class="rt-action-btn" onclick={() => startWorkspaceSession(realtimeScanResult.top_label, 'quiz')}>
+                                            <Icon name="graduation-cap" size={13} /> Study
+                                        </button>
+                                        <button class="rt-action-btn" onclick={() => startComparisonSession(realtimeScanResult.top_label)}>
+                                            <Icon name="scale" size={13} /> Compare
+                                        </button>
+                                    </div>
+                                {/if}
+                            {/if}
                         </div>
                     {/if}
                 </div>
             {/if}
 
             <!-- TAB 3: SPECIMEN EXPLORER -->
-            {#if activeTab === '🔍 Specimen Explorer'}
+            {#if activeTab === 'Specimen Explorer'}
                 <div class="glass-card search-card">
                     <div class="search-input-row">
                         <input
@@ -1528,7 +1706,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                     </div>
 
                     {#if searchError}
-                        <div class="error-banner">{searchError}</div>
+                        <div class="error-banner"><Icon name="alert-triangle" size={14} /> {searchError}</div>
                     {/if}
 
                     {#if searchResult}
@@ -1558,23 +1736,24 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
                                         <!-- Interactive Study Integration -->
                                         <div class="hud-study-actions border-top">
-                                            <h4>⚡ Specimen Action Suite</h4>
+                                            <h4><Icon name="zap" size={16} /> Specimen Action Suite</h4>
                                             <div class="study-actions-grid">
                                                 <button class="action-btn study-btn" onclick={() => startWorkspaceSession(searchQuery, 'quiz')}>
-                                                    🎓 Run MCQ Quiz
+                                                    <Icon name="graduation-cap" size={14} /> Run MCQ Quiz
                                                 </button>
                                                 <button class="action-btn study-btn" onclick={() => startWorkspaceSession(searchQuery, 'flash')}>
-                                                    🎴 Study Flashcards
+                                                    <Icon name="layers" size={14} /> Study Flashcards
                                                 </button>
                                                 <button class="action-btn study-btn" onclick={() => startWorkspaceSession(searchQuery, 'explain')}>
-                                                    📖 Full Details
+                                                    <Icon name="book-open" size={14} /> Full Details
                                                 </button>
                                                 <button class="action-btn compare-btn" onclick={() => startComparisonSession(searchQuery)}>
-                                                    ⚖️ Compare Target
+                                                    <Icon name="scale" size={14} /> Compare Target
                                                 </button>
                                                 {#if getObjectGenerationAction(searchQuery)}
+                                                    {@const genAction = getObjectGenerationAction(searchQuery)}
                                                     <button class="action-btn compare-btn" style="grid-column: span 2;" onclick={() => generateForDetectedObject(searchQuery)}>
-                                                        {getObjectGenerationAction(searchQuery).icon} {getObjectGenerationAction(searchQuery).title}
+                                                        <Icon name={genAction.icon} size={14} /> {genAction.title}
                                                     </button>
                                                 {/if}
                                             </div>
@@ -1591,7 +1770,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             {/if}
 
             <!-- TAB 4: STUDY WORKSPACE -->
-            {#if activeTab === '🎓 Study Workspace'}
+            {#if activeTab === 'Study Workspace'}
                 <div class="glass-card learning-card">
                     <div class="learning-header-input">
                                         <div class="input-col">
@@ -1605,22 +1784,27 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                         </div>
                                         <div style="display: flex; gap: 8px; flex-shrink: 0; align-items: flex-end;">
                                             <button class="generate-learn-btn" onclick={loadLearningCurriculum} disabled={learningLoading}>
-                                                {learningLoading ? 'Compiling Workspace...' : '💡 Explore Knowledge'}
+                                                {#if learningLoading}
+                                                    <Icon name="loader" size={15} spin /> Compiling Workspace...
+                                                {:else}
+                                                    <Icon name="lightbulb" size={15} /> Explore Knowledge
+                                                {/if}
                                             </button>
                                             {#if learningData && getObjectGenerationAction(learningTarget)}
+                                                {@const genAction = getObjectGenerationAction(learningTarget)}
                                                 <button
                                                     class="generate-learn-btn"
                                                     style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.28); color: var(--accent); height: 50px; padding: 14px 20px;"
                                                     onclick={() => generateForDetectedObject(learningTarget)}
                                                 >
-                                                    {getObjectGenerationAction(learningTarget).icon} {getObjectGenerationAction(learningTarget).title}
+                                                    <Icon name={genAction.icon} size={15} /> {genAction.title}
                                                 </button>
                                             {/if}
                                         </div>
                                     </div>
 
                     {#if learningError}
-                        <div class="error-banner">{learningError}</div>
+                        <div class="error-banner"><Icon name="alert-triangle" size={14} /> {learningError}</div>
                     {/if}
 
                     {#if learningLoading}
@@ -1685,7 +1869,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             {/if}
 
             <!-- TAB 5: DOCUMENT DIGEST -->
-            {#if activeTab === '📖 Document Digest'}
+            {#if activeTab === 'Document Digest'}
                 <div class="glass-card ocr-card">
                     <div class="ocr-inputs">
                         <label for="ocr-picker" class="ocr-upload-lbl">
@@ -1710,7 +1894,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                     {/if}
 
                     {#if ocrError}
-                        <div class="error-banner">{ocrError}</div>
+                        <div class="error-banner"><Icon name="alert-triangle" size={14} /> {ocrError}</div>
                     {/if}
 
                     {#if ocrResult}
@@ -1736,7 +1920,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                         class="download-btn"
                                         style="margin-top: 1rem;"
                                     >
-                                        📥 Download Study Guide as TXT
+                                        <Icon name="download" size={14} /> Download Study Guide as TXT
                                     </a>
                                 {:else}
                                     <p class="offline-note">Ollama is offline. Start local LLM to automatically generate summaries and exam questions.</p>
@@ -1748,7 +1932,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             {/if}
 
             <!-- TAB: AI IMAGE STUDIO -->
-            {#if activeTab === '🎨 AI Image Studio'}
+            {#if activeTab === 'AI Image Studio'}
                 <div class="chatgpt-layout">
                     <!-- ChatGPT/Claude-style Sidebar -->
                     <div class="chatgpt-sidebar">
@@ -1757,11 +1941,11 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             <div style="display: flex; gap: 8px;">
                                 {#if generationHistory.length > 0}
                                     <button class="new-chat-btn" onclick={clearImageGenerationHistory} title="Clear All History" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); color: #ff5555;">
-                                        🗑️ Clear
+                                        <Icon name="trash" size={13} /> Clear
                                     </button>
                                 {/if}
                                 <button class="new-chat-btn" onclick={() => { generatedImageUrl = ''; imagePrompt = ''; }} title="New Generation">
-                                    ➕ New
+                                    <Icon name="plus" size={13} /> New
                                 </button>
                             </div>
                         </div>
@@ -1790,14 +1974,14 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                             onclick={(e) => { e.stopPropagation(); regenerateImage(item.prompt); }}
                                             title="Regenerate"
                                         >
-                                            ↻
+                                            <Icon name="refresh-cw" size={13} />
                                         </button>
                                         <button
                                             class="delete-chat-item-btn"
                                             onclick={(e) => deleteImageGeneration(item.id, e)}
                                             title="Delete Generation"
                                         >
-                                            ✕
+                                            <Icon name="x" size={13} />
                                         </button>
                                     </div>
                                 {/each}
@@ -1811,7 +1995,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             {#if isGeneratingImage}
                                 <div class="gen-loading-overlay">
                                     <div class="discovery-pulse-container">
-                                        <div class="pulse-icon">🎨</div>
+                                        <div class="pulse-icon"><Icon name="palette" size={22} /></div>
                                         <div class="pulse-waves"></div>
                                     </div>
                                     <p class="gen-loading-text">Synthesizing a VisionAI learning visual with FLUX.1-schnell...</p>
@@ -1821,36 +2005,36 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                     <img src={generatedImageUrl} alt="Generated Visual Matrix" class="generated-preview-img" />
                                     <div class="viewport-action-overlay">
                                         <button class="download-btn inline-btn" onclick={() => regenerateImage(imagePrompt)}>
-                                            ↻ Regenerate
+                                            <Icon name="refresh-cw" size={14} /> Regenerate
                                         </button>
                                         <button class="download-btn inline-btn" onclick={downloadGeneratedImage}>
-                                            📥 Download PNG
+                                            <Icon name="download" size={14} /> Download PNG
                                         </button>
                                     </div>
                                 </div>
                             {:else}
                                 <div class="chatgpt-welcome">
                                     <div class="welcome-header">
-                                        <div class="welcome-logo">🎨</div>
+                                        <div class="welcome-logo"><Icon name="palette" size={32} /></div>
                                         <h1>AI Image Studio</h1>
                                         <p>Turn detected objects and learning prompts into connected visual explanations with Hugging Face FLUX.</p>
                                     </div>
 
                                     <div class="welcome-suggestions">
                                         <button class="suggestion-card-btn" onclick={() => triggerImageGeneration('Create an educational wildlife illustration of a Bengal Tiger showing habitat, anatomy, conservation status, and scientific labels.')}>
-                                            <span class="suggestion-icon">🐅</span>
+                                            <span class="suggestion-icon"><Icon name="image" size={18} /></span>
                                             <span class="suggestion-text">Realistic Bengal Tiger</span>
                                         </button>
                                         <button class="suggestion-card-btn" onclick={() => triggerImageGeneration('Create a futuristic AI-powered laptop from the year 2050 with advanced holographic interfaces and modern industrial design.')}>
-                                            <span class="suggestion-icon">🚀</span>
+                                            <span class="suggestion-icon"><Icon name="rocket" size={18} /></span>
                                             <span class="suggestion-text">Future Laptop 2050</span>
                                         </button>
                                         <button class="suggestion-card-btn" onclick={() => triggerImageGeneration('Create a detailed scientific botanical diagram with labels and educational annotations.')}>
-                                            <span class="suggestion-icon">🌿</span>
+                                            <span class="suggestion-icon"><Icon name="leaf" size={18} /></span>
                                             <span class="suggestion-text">Botanical Diagram</span>
                                         </button>
                                         <button class="suggestion-card-btn" onclick={() => triggerImageGeneration('Create a VisionAI educational diagram of an atom showing the nucleus, electron shells, and clear scientific annotations.')}>
-                                            <span class="suggestion-icon">⚛️</span>
+                                            <span class="suggestion-icon"><Icon name="cpu" size={18} /></span>
                                             <span class="suggestion-text">Atomic Structure Diagram</span>
                                         </button>
                                     </div>
@@ -1892,7 +2076,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             </div>
 
                             {#if imageGenerationError}
-                                <div class="error-banner chatgpt-error">{imageGenerationError}</div>
+                                <div class="error-banner chatgpt-error"><Icon name="alert-triangle" size={14} /> {imageGenerationError}</div>
                             {/if}
 
                             <div class="chatgpt-disclaimer">
@@ -1905,14 +2089,14 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
 
             <!-- TAB 6: ARCHIVE LOGS -->
-            {#if activeTab === '⏳ Archive Logs'}
+            {#if activeTab === 'Archive Logs'}
                 <div class="glass-card history-panel-card">
                     <HistoryPanel onInspect={handleHistoryInspect} onUpdateCount={(count) => { totalSpecimensCount = count; }} />
                 </div>
             {/if}
 
             <!-- TAB 7: SPECIMEN COMPARATOR -->
-            {#if activeTab === '⚖️ Specimen Comparator'}
+            {#if activeTab === 'Specimen Comparator'}
                 <div class="glass-card compare-card">
                     <div class="compare-inputs-row">
                         <div class="comp-col">
@@ -1925,12 +2109,16 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                             <input id="comp-b" type="text" bind:value={compareB} />
                         </div>
                         <button onclick={executeComparison} disabled={compareLoading}>
-                            {compareLoading ? 'Analyzing...' : '⚖️ Compare Specimens'}
+                            {#if compareLoading}
+                                <Icon name="loader" size={15} spin /> Analyzing...
+                            {:else}
+                                <Icon name="scale" size={15} /> Compare Specimens
+                            {/if}
                         </button>
                     </div>
 
                     {#if compareError}
-                        <div class="error-banner">{compareError}</div>
+                        <div class="error-banner"><Icon name="alert-triangle" size={14} /> {compareError}</div>
                     {/if}
 
                     {#if compareLoading}
@@ -1949,7 +2137,7 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
             {/if}
 
             <!-- TAB 8: OPERATOR MANUAL -->
-            {#if activeTab === 'ℹ️ Operator Manual'}
+            {#if activeTab === 'Operator Manual'}
                 <div class="manual-layout">
                     <!-- Workflow Pipeline Diagram -->
                     <div class="manual-section pipeline-section">
@@ -1958,25 +2146,25 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
 
                         <div class="manual-pipeline">
                             <div class="pipeline-node surface-glow">
-                                <span class="icon">📸</span>
+                                <span class="icon"><Icon name="camera" size={22} /></span>
                                 <span class="lbl">Capture Feed</span>
                                 <span class="desc">Snapshot snap / file upload</span>
                             </div>
-                            <div class="pipeline-arrow">➔</div>
+                            <div class="pipeline-arrow"><Icon name="arrow-right" size={16} /></div>
                             <div class="pipeline-node primary-glow">
-                                <span class="icon">🧠</span>
+                                <span class="icon"><Icon name="cpu" size={22} /></span>
                                 <span class="lbl">Vision Inference</span>
                                 <span class="desc">YOLOv8 / MobileNet engine</span>
                             </div>
-                            <div class="pipeline-arrow">➔</div>
+                            <div class="pipeline-arrow"><Icon name="arrow-right" size={16} /></div>
                             <div class="pipeline-node emerald-glow">
-                                <span class="icon">📚</span>
+                                <span class="icon"><Icon name="book" size={22} /></span>
                                 <span class="lbl">LLM Synthesis</span>
                                 <span class="desc">Ollama curriculum generator</span>
                             </div>
-                            <div class="pipeline-arrow">➔</div>
+                            <div class="pipeline-arrow"><Icon name="arrow-right" size={16} /></div>
                             <div class="pipeline-node yellow-glow">
-                                <span class="icon">💾</span>
+                                <span class="icon"><Icon name="database" size={22} /></span>
                                 <span class="lbl">Local Archive</span>
                                 <span class="desc">SQLite database logging</span>
                             </div>
@@ -1988,15 +2176,15 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                         <div class="column-left flex-col gap-md">
                             <div class="glass-card compact">
                                 <h3>Vision Engine Architecture</h3>
-                                <p class="desc-text">VisionAI operates through a decoupled dual-engine offline computer vision pipeline:</p>
+                                <p class="desc-text">VisionAI runs two dedicated offline computer vision engines, each fixed to the tool it powers:</p>
                                 <div class="tech-grid">
                                     <div class="tech-card">
                                         <span class="tech-title">MobileNetV2 (Classification)</span>
-                                        <p>Executes custom contour-detection crops on regions of interest, resizes targets to 224x224, and feeds matrices natively into ONNX weights.</p>
+                                        <p>Powers the Image Scanner. Executes custom contour-detection crops on regions of interest, resizes targets to 224x224, and feeds matrices natively into ONNX weights.</p>
                                     </div>
                                     <div class="tech-card">
                                         <span class="tech-title">YOLOv8 Nano (Detection)</span>
-                                        <p>Evaluates full-frame imagery directly at 640x640 resolutions, outputs label coordinates, and applies Non-Maximum Suppression (NMS) to eliminate overlapping bounding boxes.</p>
+                                        <p>Powers Real-Time Scan. Evaluates full-frame imagery directly at 640x640 resolutions, outputs label coordinates, and applies Non-Maximum Suppression (NMS) to eliminate overlapping bounding boxes.</p>
                                     </div>
                                 </div>
                             </div>
@@ -2013,31 +2201,31 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
                                 <h3>Tactical Operations Catalog</h3>
                                 <div class="instructions-list">
                                     <div class="instruction-item">
-                                        <span class="item-head">📸 Image Scanner & Chat</span>
+                                        <span class="item-head"><Icon name="camera" size={15} /> Image Scanner & Chat</span>
                                         <p>Feed a static image file or snaps to identify labels. Ask the interactive chat widget contextual queries to explore specific structural properties.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">📹 Real-Time Scan</span>
+                                        <span class="item-head"><Icon name="video" size={15} /> Real-Time Scan</span>
                                         <p>Toggle your webcam to dynamically capture diagnostic frames and inspect physical objects in real-time.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">🔍 Specimen Explorer</span>
+                                        <span class="item-head"><Icon name="search" size={15} /> Specimen Explorer</span>
                                         <p>Query Wikipedia databases for encyclopedia entries, download reference illustrations, and pull structured Ollama fact sheets offline.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">🎓 Study Workspace</span>
+                                        <span class="item-head"><Icon name="graduation-cap" size={15} /> Study Workspace</span>
                                         <p>Compile a custom learning curriculum containing detailed summaries, 3D flashcard decks, interactive quizzes, and oral revision items.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">📖 Document Digest</span>
+                                        <span class="item-head"><Icon name="book-open" size={15} /> Document Digest</span>
                                         <p>Upload worksheets or documents to extract printable text using OCR and parse summary notes. Listen to summaries read aloud via speech synthesis.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">⏳ Archive Logs</span>
+                                        <span class="item-head"><Icon name="archive" size={15} /> Archive Logs</span>
                                         <p>Inspect previous diagnostic reports, reload historical specimens to run study workflows, or clear log tables.</p>
                                     </div>
                                     <div class="instruction-item">
-                                        <span class="item-head">⚖️ Specimen Comparator</span>
+                                        <span class="item-head"><Icon name="scale" size={15} /> Specimen Comparator</span>
                                         <p>Select two arbitrary concepts to output side-by-side matrices contrasting their size, habitats, composition, functions, and key insights.</p>
                                     </div>
                                 </div>
@@ -2083,7 +2271,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .logo-eye {
-        font-size: 2rem;
+        display: inline-flex;
+        color: var(--primary);
         animation: float-eye 5s ease-in-out infinite;
     }
 
@@ -2115,6 +2304,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         background: transparent;
         border: none;
         color: var(--text-secondary);
@@ -2127,10 +2319,20 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         transition: all 0.3s ease;
     }
 
+    .nav-item :global(.nav-item-icon) {
+        color: var(--text-muted);
+        transition: color 0.25s ease, transform 0.25s ease;
+    }
+
     .nav-item:hover {
         background: rgba(255, 255, 255, 0.04);
         color: var(--text-primary);
         transform: translateX(4px);
+    }
+
+    .nav-item:hover :global(.nav-item-icon) {
+        color: var(--primary);
+        transform: scale(1.1);
     }
 
     .nav-item.active {
@@ -2139,6 +2341,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         color: var(--primary);
         font-weight: 600;
         box-shadow: var(--glow-surface);
+    }
+
+    .nav-item.active :global(.nav-item-icon) {
+        color: var(--primary);
     }
 
     /* Sidebar settings */
@@ -2153,6 +2359,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         margin: 0 0 1rem 0;
         font-size: 0.95rem;
         color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .setting-row {
@@ -2169,16 +2378,6 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     .setting-row label {
         font-size: 0.8rem;
         color: var(--text-secondary);
-    }
-
-    .setting-row select {
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid var(--border);
-        color: var(--text-primary);
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 0.85rem;
-        outline: none;
     }
 
     .slider-header {
@@ -2210,6 +2409,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     .toggle-row label {
         margin: 0;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
     .toggle-row input {
@@ -2219,8 +2421,42 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         font-size: 0.85rem;
         font-weight: 600;
+    }
+
+    .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .status-dot-green {
+        background: #22c55e;
+        color: #22c55e;
+        animation: status-pulse 2s ease-in-out infinite;
+    }
+
+    .status-dot-yellow {
+        background: #facc15;
+        color: #facc15;
+        animation: status-pulse 1.2s ease-in-out infinite;
+    }
+
+    .status-dot-red {
+        background: #ef4444;
+        color: #ef4444;
+    }
+
+    @keyframes status-pulse {
+        0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+        70% { box-shadow: 0 0 0 6px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
     }
 
     .offline-box {
@@ -2241,6 +2477,86 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         color: #ef4444;
         padding: 2px 4px;
         border-radius: 4px;
+    }
+
+    .offline-retry-btn {
+        margin-top: 4px;
+        padding: 5px 10px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .offline-retry-btn:hover:not(:disabled) {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.6);
+    }
+
+    .offline-retry-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .rt-engine-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 4px 10px;
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        color: var(--accent);
+        border-radius: 20px;
+        letter-spacing: 0.03em;
+    }
+
+    .auto-scan-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border: 1px solid rgba(99, 102, 241, 0.4);
+        background: rgba(99, 102, 241, 0.08);
+        color: #a5b4fc;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+
+    .auto-scan-btn:hover:not(:disabled) {
+        background: rgba(99, 102, 241, 0.18);
+        border-color: rgba(99, 102, 241, 0.6);
+    }
+
+    .auto-scan-btn.auto-scan-on {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.4);
+        color: #fca5a5;
+        animation: auto-scan-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes auto-scan-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+        50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+
+    .auto-scan-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
     }
 
     /* Main Content Canvas */
@@ -2267,6 +2583,19 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         font-size: 2.2rem;
         font-weight: 700;
         letter-spacing: -0.02em;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .app-header h1 :global(.header-icon) {
+        color: var(--primary);
+        animation: header-icon-in 0.4s ease;
+    }
+
+    @keyframes header-icon-in {
+        from { opacity: 0; transform: scale(0.7) rotate(-8deg); }
+        to { opacity: 1; transform: scale(1) rotate(0deg); }
     }
 
     /* Demo dashboard overlay */
@@ -2392,6 +2721,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .error-banner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         background: rgba(239, 68, 68, 0.1);
         border: 1px solid rgba(239, 68, 68, 0.2);
         color: #f87171;
@@ -2399,6 +2731,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         border-radius: 12px;
         font-size: 0.9rem;
         margin-top: 1rem;
+    }
+
+    .error-banner :global(.vi-icon) {
+        flex-shrink: 0;
     }
 
     .inference-stats {
@@ -2510,6 +2846,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         margin: 0;
         font-size: 1.25rem;
         font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .tts-btn {
@@ -2650,6 +2989,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         margin: 0 0 12px 0;
         font-size: 0.95rem;
         color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .chat-viewport {
@@ -2819,6 +3161,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .start-camera-btn, .snap-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
         background: linear-gradient(135deg, var(--primary), var(--secondary));
         border: none;
         color: white;
@@ -2856,6 +3202,172 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         color: var(--text-primary);
     }
 
+    /* Live capture: annotated frame overlay (sits on top of the live video, not a separate box) */
+    .rt-annotated-overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        animation: rt-fade-in 0.35s ease;
+    }
+
+    @keyframes rt-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .rt-scan-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: rgba(5, 8, 14, 0.55);
+        backdrop-filter: blur(2px);
+    }
+
+    .rt-scanner-laser {
+        width: 70%;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--primary), transparent);
+        box-shadow: 0 0 12px var(--primary);
+        animation: rt-laser-sweep 1.4s ease-in-out infinite;
+    }
+
+    @keyframes rt-laser-sweep {
+        0% { transform: translateY(-60px); opacity: 0.3; }
+        50% { transform: translateY(60px); opacity: 1; }
+        100% { transform: translateY(-60px); opacity: 0.3; }
+    }
+
+    .rt-scan-status {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        letter-spacing: 0.02em;
+    }
+
+    .rt-overlay-hud {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: rgba(5, 8, 14, 0.55);
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        animation: rt-fade-in 0.35s ease;
+    }
+
+    .rt-latency-badge {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    /* Live capture: detection strip below the camera, part of the same card */
+    .rt-results-panel {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.18);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        box-sizing: border-box;
+    }
+
+    .slide-up-reveal {
+        animation: rt-slide-up 0.3s ease;
+    }
+
+    @keyframes rt-slide-up {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .rt-no-detections {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 0.5rem 0;
+        color: var(--text-muted);
+        text-align: center;
+    }
+
+    .rt-no-detections span {
+        font-size: 1.5rem;
+    }
+
+    .rt-no-detections p {
+        margin: 0;
+        font-size: 0.9rem;
+    }
+
+    .rt-detections-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .rt-det-chip {
+        flex: 1 1 200px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 14px;
+    }
+
+    .rt-det-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+
+    .rt-det-label {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .rt-det-conf {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--primary);
+    }
+
+    .rt-quick-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+
+    .rt-action-btn {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+
+    .rt-action-btn:hover {
+        background: rgba(34, 197, 94, 0.1);
+        border-color: rgba(34, 197, 94, 0.4);
+        color: var(--text-primary);
+    }
+
     /* Search Object styles */
     .search-card, .learning-card, .ocr-card, .compare-card, .history-panel-card {
         max-width: 1200px;
@@ -2887,6 +3399,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .search-input-row button, .generate-learn-btn, .compare-inputs-row button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
         background: var(--primary);
         border: none;
         color: white;
@@ -3451,7 +3967,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .pipeline-node .icon {
-        font-size: 1.8rem;
+        display: flex;
+        color: var(--primary);
     }
 
     .pipeline-node .lbl {
@@ -3577,7 +4094,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         font-weight: 700;
         font-size: 0.95rem;
         color: var(--text-primary);
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 7px;
         margin-bottom: 4px;
     }
 
@@ -3611,6 +4130,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         color: var(--secondary);
         letter-spacing: 0.05em;
         text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .study-actions-grid {
@@ -3719,7 +4241,10 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .pulse-icon {
-        font-size: 2.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--primary);
         z-index: 2;
     }
 
@@ -3875,7 +4400,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         background: rgba(255, 255, 255, 0.02);
     }
     .enrich-title {
-        display: block;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
@@ -3934,7 +4461,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         background: rgba(22, 163, 74, 0.05);
     }
     .badge-icon {
-        font-size: 1rem;
+        display: inline-flex;
+        color: #facc15;
     }
     .badge-title {
         font-size: 0.8rem;
@@ -4099,6 +4627,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
         opacity: 0;
         transition: all 0.2s ease;
         z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .history-chat-item:hover .history-regenerate-btn,
@@ -4220,7 +4751,9 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .welcome-logo {
-        font-size: 3rem;
+        display: flex;
+        justify-content: center;
+        color: var(--primary);
         filter: drop-shadow(0 8px 12px rgba(3, 7, 18, 0.3));
         margin-bottom: 4px;
     }
@@ -4271,7 +4804,8 @@ Though both belong to the genus *Panthera* and share nearly identical skeletal s
     }
 
     .suggestion-icon {
-        font-size: 1.2rem;
+        display: flex;
+        color: var(--primary);
     }
 
     .suggestion-text {

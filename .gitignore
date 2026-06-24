@@ -11,6 +11,8 @@ node_modules/
 /.svelte-kit/
 /build/
 /dist/
+.claude
+
 
 # ---- Vite ----
 vite.config.js.timestamp-*

@@ -1,6 +1,5 @@
 import base64
 import binascii
-import os
 import sqlite3
 from datetime import datetime
 from io import BytesIO
@@ -89,12 +88,21 @@ def _persist_legacy_data_url(legacy_id: int, image_url: str) -> str | None:
     return output_path.relative_to(PROJECT_ROOT).as_posix()
 
 
+def _resolve_image_path(image_path: str) -> Path:
+    """Resolves a stored image path (relative or legacy absolute) to an existing file."""
+    candidate = Path(image_path)
+    if candidate.is_absolute():
+        return candidate
+    return (PROJECT_ROOT / candidate).resolve()
+
+
 def generate_thumbnail(image_path: str, max_size: int = 150) -> str:
     """Return a compact JPEG data URL for a saved scan image."""
-    if not image_path or not os.path.exists(image_path):
+    resolved_path = _resolve_image_path(image_path) if image_path else None
+    if not resolved_path or not resolved_path.exists():
         return ""
     try:
-        image = cv2.imread(image_path)
+        image = cv2.imread(str(resolved_path))
         if image is None:
             return ""
 
@@ -151,11 +159,13 @@ def delete_record(record_id: int):
         row = cursor.execute(
             "SELECT image_path FROM scan_history WHERE id = ?", (record_id,)
         ).fetchone()
-        if row and row[0] and os.path.exists(row[0]):
-            try:
-                os.remove(row[0])
-            except OSError:
-                pass
+        if row and row[0]:
+            resolved_path = _resolve_image_path(row[0])
+            if resolved_path.exists():
+                try:
+                    resolved_path.unlink()
+                except OSError:
+                    pass
         cursor.execute("DELETE FROM scan_history WHERE id = ?", (record_id,))
 
 
@@ -166,11 +176,13 @@ def clear_history():
         cursor = conn.cursor()
         rows = cursor.execute("SELECT image_path FROM scan_history").fetchall()
         for row in rows:
-            if row[0] and os.path.exists(row[0]):
-                try:
-                    os.remove(row[0])
-                except OSError:
-                    pass
+            if row[0]:
+                resolved_path = _resolve_image_path(row[0])
+                if resolved_path.exists():
+                    try:
+                        resolved_path.unlink()
+                    except OSError:
+                        pass
         cursor.execute("DELETE FROM scan_history")
 
 

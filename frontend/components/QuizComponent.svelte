@@ -1,5 +1,6 @@
 <script>
     import ReadingHighlighter from './ReadingHighlighter.svelte';
+    import Icon from './Icon.svelte';
 
     let { mcqs = [], targetObject = '' } = $props();
 
@@ -57,10 +58,16 @@
     function checkOptionCorrect(mcq, option, optIdx) {
         const answerStr = mcq.answer.trim();
 
-        // Case 1: Answer is a single index letter (A, B, C, D)
-        if (/^[A-D]$/i.test(answerStr)) {
-            const correctLetterIdx = answerStr.toUpperCase().charCodeAt(0) - 65;
-            return optIdx === correctLetterIdx;
+        // Case 1: Answer starts with an option letter (A, B, C, D), e.g. "D", "D.", "D) 6".
+        // Trust the letter over any trailing text, since the LLM occasionally writes a
+        // letter/text pair that disagree (e.g. "D. 6" when D is actually "5") - the letter
+        // is what maps unambiguously back to an options[] index.
+        const letterMatch = answerStr.match(/^([A-D])(?:[.):\s]|$)/i);
+        if (letterMatch) {
+            const correctLetterIdx = letterMatch[1].toUpperCase().charCodeAt(0) - 65;
+            if (correctLetterIdx < mcq.options.length) {
+                return optIdx === correctLetterIdx;
+            }
         }
 
         // Case 2: Answer is full text (with/without index prefixes)
@@ -112,7 +119,7 @@
 
 {#if mcqs && mcqs.length > 0}
     <div class="quiz-container">
-        <h3 class="quiz-heading">🎓 Diagnostic Examination: {targetObject}</h3>
+        <h3 class="quiz-heading"><Icon name="graduation-cap" size={19} /> Diagnostic Examination: {targetObject}</h3>
 
         <!-- Progression Indicator -->
         <div class="quiz-progress-section">
@@ -168,11 +175,11 @@
                     <div class="results-text">
                         <div class="badge-row">
                             {#if score === mcqs.length}
-                                <span class="badge perfect-badge">🏆 MASTERED</span>
+                                <span class="badge perfect-badge"><Icon name="award" size={13} /> MASTERED</span>
                             {:else if score >= 3}
-                                <span class="badge verified-badge">⚡ VERIFIED</span>
+                                <span class="badge verified-badge"><Icon name="check" size={13} /> VERIFIED</span>
                             {:else}
-                                <span class="badge practice-badge">⏳ PRACTICE RUN</span>
+                                <span class="badge practice-badge"><Icon name="repeat" size={13} /> PRACTICE RUN</span>
                             {/if}
                             <h4>Diagnostic Completed!</h4>
                         </div>
@@ -225,10 +232,17 @@
         font-weight: 700;
         color: #f1f5f9;
         margin-bottom: 0.2rem;
-        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
         background: linear-gradient(135deg, var(--primary), var(--secondary));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+    }
+
+    .quiz-heading :global(.vi-icon) {
+        color: var(--primary);
     }
 
     /* Progression Track */
@@ -524,6 +538,9 @@
     }
 
     .badge {
+        display: flex;
+        align-items: center;
+        gap: 5px;
         font-size: 0.75rem;
         font-weight: 700;
         padding: 3px 10px;

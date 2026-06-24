@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 from datetime import datetime
 
+from backend.config import settings
+
 # Maximum file size allowed: 10 MB
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png'}
@@ -49,31 +51,34 @@ def load_image_from_bytes(image_bytes: bytes) -> np.ndarray:
         raise ValueError("Failed to decode image. The file may be corrupted or in an unsupported format.")
     return image
 
-def save_uploaded_image(image_bytes: bytes, original_filename: str, upload_dir: str = "uploads") -> str:
+def save_uploaded_image(image_bytes: bytes, original_filename: str, upload_dir: str | None = None) -> str:
     """
     Saves the image bytes to a file in the upload directory with a unique timestamped name.
-    
+
     Args:
         image_bytes (bytes): Raw image bytes.
         original_filename (str): Original name of the uploaded file.
-        upload_dir (str): Directory where the image should be saved.
-        
+        upload_dir (str | None): Directory where the image should be saved.
+            Defaults to <project_root>/uploads so the path is stable regardless
+            of the working directory the server was launched from.
+
     Returns:
-        str: Absolute path to the saved file.
+        str: Path to the saved file, relative to the project root, so it stays
+            valid if the project folder is moved or copied to another machine.
     """
-    if not os.path.exists(upload_dir):
-        os.makedirs(upload_dir, exist_ok=True)
-        
+    target_dir = (settings.project_root / "uploads") if upload_dir is None else os.path.abspath(upload_dir)
+    os.makedirs(target_dir, exist_ok=True)
+
     _, ext = os.path.splitext(original_filename.lower())
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # Clean file name or generate a safe unique name
     safe_filename = f"upload_{timestamp}{ext}"
-    dest_path = os.path.join(upload_dir, safe_filename)
-    
+    dest_path = os.path.join(target_dir, safe_filename)
+
     with open(dest_path, "wb") as f:
         f.write(image_bytes)
-        
-    return os.path.abspath(dest_path)
+
+    return os.path.relpath(dest_path, settings.project_root).replace(os.sep, "/")
 
 def get_wikipedia_image(query: str) -> tuple[str | None, str | None]:
     """

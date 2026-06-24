@@ -47,12 +47,12 @@ class LocalLLMService:
     def check_connection(self) -> bool:
         """
         Fast socket connection check followed by an API call verification.
-        Returns True if Ollama service is running and responsive.
+        Returns True if Ollama service is running and responsive with the configured model.
         """
         # 1. Quick Socket Check (non-blocking, fast fail if service is down)
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
+            sock.settimeout(2.0)  # Increased to 2s for reliability
             result = sock.connect_ex((self.host_ip, self.host_port))
             sock.close()
             if result != 0:
@@ -60,12 +60,28 @@ class LocalLLMService:
         except Exception:
             return False
 
-        # 2. HTTP Client Verification
+        # 2. HTTP Client Verification — list models and confirm target model exists
         try:
-            # Quick ping using list models (very fast)
-            self.client.list()
+            response = self.client.list()
+            # Check if our configured model is available
+            models = response.get("models", []) if isinstance(response, dict) else getattr(response, "models", [])
+            if models:
+                model_names = []
+                for m in models:
+                    if isinstance(m, dict):
+                        model_names.append(m.get("name", ""))
+                    else:
+                        # Ollama SDK returns model objects with a .model attribute
+                        name = getattr(m, "model", "") or getattr(m, "name", "")
+                        model_names.append(name)
+                # Match if any stored model name starts with or equals our model name
+                target = self.model_name.lower()
+                if not any(target in n.lower() or n.lower().startswith(target.split(":")[0]) for n in model_names):
+                    print(f"VisionAI: Model '{self.model_name}' not found in Ollama. Available: {model_names}")
+                    return False
             return True
-        except Exception:
+        except Exception as e:
+            print(f"VisionAI: Ollama HTTP check failed: {e}")
             return False
 
     def _load_cache(self) -> dict:

@@ -39,6 +39,11 @@ router = APIRouter()
 # Pre-load/instantiate services
 detector = ObjectDetector(mode="classification")
 detector.load_model()
+
+# Dedicated YOLO detector for real-time scan (always detection mode)
+yolo_detector = ObjectDetector(mode="detection")
+yolo_detector.load_model()
+
 llm_service = LocalLLMService()
 ocr_service = OCRService()
 image_service = FluxImageService()
@@ -49,9 +54,57 @@ def get_status():
     ollama_active = llm_service.check_connection()
     return {
         "ollama_active": ollama_active,
-        "ollama_model": llm_service.model_name,
+        "ollama_model": llm_service.model_name if ollama_active else "offline",
         "vision_engine": detector.mode
     }
+
+@router.post("/api/realtime-scan")
+async def realtime_scan(
+    file: UploadFile = File(...),
+    confidence_threshold: float = Form(0.20)
+):
+    """Real-time YOLO-only scan endpoint. Always uses YOLOv8 detection for live frames."""
+    try:
+        file_bytes = await file.read()
+
+        is_valid, err_msg = validate_image_file(file.filename, len(file_bytes))
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=err_msg)
+
+        bgr_image = load_image_from_bytes(file_bytes)
+
+        # Always use YOLO detection for real-time scanning
+        start_time = time.perf_counter()
+        detections = yolo_detector.detect_and_classify(bgr_image, min_confidence=confidence_threshold)
+        latency_ms = (time.perf_counter() - start_time) * 1000
+
+        # Always return annotated image
+        if detections:
+            annotated_bgr = yolo_detector.draw_detections(bgr_image, detections)
+        else:
+            annotated_bgr = bgr_image
+
+        _, buffer = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        base64_str = base64.b64encode(buffer).decode('utf-8')
+
+        # Save top detection to history
+        if detections:
+            top_det = detections[0]
+            save_path = save_uploaded_image(file_bytes, file.filename)
+            save_scan(top_det['label'], top_det['confidence'], save_path)
+
+        return {
+            "detections": detections,
+            "latency_ms": latency_ms,
+            "resolution": f"{bgr_image.shape[1]}x{bgr_image.shape[0]}",
+            "annotated_image": f"data:image/jpeg;base64,{base64_str}",
+            "top_label": detections[0]['label'] if detections else None,
+            "engine": "yolov8"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Real-time scan error: {str(e)}")
 
 @router.post("/api/analyze")
 async def analyze_image(
